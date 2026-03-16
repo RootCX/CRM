@@ -12,14 +12,21 @@ import {
 
 import Dashboard from "./views/Dashboard";
 import ContactsView from "./views/ContactsView";
+import ContactDetail from "./views/ContactDetail";
 import CompaniesView from "./views/CompaniesView";
 import DealsView from "./views/DealsView";
 import ActivitiesView from "./views/ActivitiesView";
 
-type View = "dashboard" | "contacts" | "companies" | "deals" | "activities";
+type View = "dashboard" | "contacts" | "contact_detail" | "companies" | "deals" | "activities";
 
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+
+  const navigateToContact = (id: string) => {
+    setSelectedContactId(id);
+    setView("contact_detail");
+  };
 
   return (
     <AuthGate appTitle="CRM">
@@ -56,7 +63,7 @@ export default function App() {
                 <SidebarItem
                   icon={<IconUsers className="h-4 w-4" />}
                   label="Contacts"
-                  active={view === "contacts"}
+                  active={view === "contacts" || view === "contact_detail"}
                   onClick={() => setView("contacts")}
                 />
                 <SidebarItem
@@ -83,7 +90,13 @@ export default function App() {
 
           <AppShellMain>
             {view === "dashboard" && <Dashboard onNavigate={setView} />}
-            {view === "contacts" && <ContactsView />}
+            {view === "contacts" && <ContactsView onSelectContact={navigateToContact} />}
+            {view === "contact_detail" && selectedContactId && (
+              <ContactDetail
+                contactId={selectedContactId}
+                onBack={() => setView("contacts")}
+              />
+            )}
             {view === "companies" && <CompaniesView />}
             {view === "deals" && <DealsView />}
             {view === "activities" && <ActivitiesView />}

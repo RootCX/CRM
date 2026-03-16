@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState,
-  StatusBadge, Badge, toast,
+  StatusBadge, toast,
 } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconUsers } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -29,7 +29,11 @@ const STATUS_MAP: Record<string, string> = {
   Churned: "error",
 };
 
-export default function ContactsView() {
+interface Props {
+  onSelectContact: (id: string) => void;
+}
+
+export default function ContactsView({ onSelectContact }: Props) {
   const { data: contacts, loading, create, update, remove } = useAppCollection<Contact>(APP_ID, "contacts");
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
 
@@ -38,7 +42,6 @@ export default function ContactsView() {
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
 
   const companyOptions = companies.map(c => ({ label: c.name, value: c.id }));
-
   const companyName = (id: string) => companies.find(c => c.id === id)?.name ?? "—";
 
   const columns: ColumnDef<Contact, unknown>[] = [
@@ -74,10 +77,7 @@ export default function ContactsView() {
     { name: "email", label: "Email", type: "text" as const },
     { name: "phone", label: "Phone", type: "text" as const },
     { name: "job_title", label: "Job Title", type: "text" as const },
-    {
-      name: "company_id", label: "Company", type: "select" as const,
-      options: companyOptions,
-    },
+    { name: "company_id", label: "Company", type: "select" as const, options: companyOptions },
     {
       name: "status", label: "Status", type: "select" as const,
       options: [
@@ -140,6 +140,7 @@ export default function ContactsView() {
         pagination
         pageSize={15}
         selectable
+        onRowClick={(row) => onSelectContact(row.id)}
         rowActions={[
           {
             label: "Edit",
