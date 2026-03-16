@@ -1,0 +1,4 @@
+{
+  "preLaunch": ["verify_schema", "sync_manifest", "install_deps", "deploy_backend", "publish_frontend"],
+  "command": "cargo tauri dev"
+}

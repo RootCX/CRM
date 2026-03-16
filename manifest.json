@@ -1,0 +1,68 @@
+{
+  "appId": "crm",
+  "name": "CRM",
+  "version": "0.0.1",
+  "description": "A simple CRM to manage contacts, companies, and deals",
+  "dataContract": [
+    {
+      "entityName": "companies",
+      "fields": [
+        { "name": "name", "type": "text", "required": true },
+        { "name": "industry", "type": "text", "enum_values": ["Technology", "Finance", "Healthcare", "Retail", "Manufacturing", "Real Estate", "Education", "Other"] },
+        { "name": "website", "type": "text" },
+        { "name": "phone", "type": "text" },
+        { "name": "address", "type": "text" },
+        { "name": "notes", "type": "text" }
+      ]
+    },
+    {
+      "entityName": "contacts",
+      "fields": [
+        { "name": "first_name", "type": "text", "required": true },
+        { "name": "last_name", "type": "text", "required": true },
+        { "name": "email", "type": "text" },
+        { "name": "phone", "type": "text" },
+        { "name": "job_title", "type": "text" },
+        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "status", "type": "text", "enum_values": ["Lead", "Prospect", "Customer", "Churned"] },
+        { "name": "notes", "type": "text" }
+      ]
+    },
+    {
+      "entityName": "deals",
+      "fields": [
+        { "name": "title", "type": "text", "required": true },
+        { "name": "value", "type": "number" },
+        { "name": "stage", "type": "text", "required": true, "enum_values": ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"] },
+        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" } },
+        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "close_date", "type": "date" },
+        { "name": "notes", "type": "text" }
+      ]
+    },
+    {
+      "entityName": "activities",
+      "fields": [
+        { "name": "type", "type": "text", "required": true, "enum_values": ["Call", "Email", "Meeting", "Note", "Task"] },
+        { "name": "subject", "type": "text", "required": true },
+        { "name": "body", "type": "text" },
+        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" } },
+        { "name": "deal_id", "type": "entity_link", "references": { "entity": "deals", "field": "id" } },
+        { "name": "due_date", "type": "date" },
+        { "name": "done", "type": "boolean" }
+      ]
+    }
+  ],
+  "permissions": {
+    "permissions": [
+      { "key": "companies.read", "description": "View companies" },
+      { "key": "companies.write", "description": "Create and edit companies" },
+      { "key": "contacts.read", "description": "View contacts" },
+      { "key": "contacts.write", "description": "Create and edit contacts" },
+      { "key": "deals.read", "description": "View deals" },
+      { "key": "deals.write", "description": "Create and edit deals" },
+      { "key": "activities.read", "description": "View activities" },
+      { "key": "activities.write", "description": "Create and edit activities" }
+    ]
+  }
+}
