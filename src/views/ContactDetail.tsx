@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAppRecord, useAppCollection, useIntegration } from "@rootcx/sdk";
+import { useAppRecord, useAppCollection, useIntegration, useRuntimeClient } from "@rootcx/sdk";
 import {
   PageHeader, Tabs, TabsList, TabsTrigger, TabsContent,
   Card, CardContent, CardHeader, CardTitle,
@@ -11,7 +11,7 @@ import {
 import {
   IconEdit, IconTrash, IconMail, IconPhone, IconBriefcase,
   IconBuilding, IconNotes, IconRefresh, IconExternalLink,
-  IconInbox, IconSend, IconAlertCircle, IconPlugConnected,
+  IconInbox, IconAlertCircle, IconPlugConnected,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
@@ -32,14 +32,17 @@ interface Company { id: string; name: string; }
 interface Deal { id: string; title: string; value: number; stage: string; contact_id: string; }
 interface Activity { id: string; type: string; subject: string; done: boolean; due_date: string; contact_id: string; }
 
-interface GmailMessage {
-  id: string;
+interface StoredEmail {
+  id: string;          // DB record id
+  gmail_id: string;
+  contact_id: string;
   subject: string;
   from: string;
   to: string;
   date: string;
   snippet: string;
   body?: string;
+  created_at: string;
 }
 
 const STATUS_MAP: Record<string, string> = {
@@ -71,30 +74,45 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-function GmailTab({ contactEmail }: { contactEmail?: string }) {
-  const { connected, loading: integLoading, connect, call } = useIntegration(APP_ID, "gmail");
-  const [emails, setEmails] = useState<GmailMessage[]>([]);
-  const [fetchLoading, setFetchLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
-  const [selectedEmail, setSelectedEmail] = useState<GmailMessage | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
+  const { connected, loading: integLoading, connect } = useIntegration(APP_ID, "gmail");
+  const { data: storedEmails, loading: dbLoading, refetch } = useAppCollection<StoredEmail>(APP_ID, "contact_emails");
+  const client = useRuntimeClient();
 
-  const fetchEmails = async () => {
-    if (!contactEmail) return;
-    setFetchLoading(true);
+  const [syncing, setSyncing] = useState(false);
+  const [selectedEmail, setSelectedEmail] = useState<StoredEmail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [syncInfo, setSyncInfo] = useState<{ synced: number; total: number } | null>(null);
+
+  // Filter stored emails for this contact, sorted newest first
+  const emails = storedEmails
+    .filter((e) => e.contact_id === contactId)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const handleSync = async () => {
+    if (!contactEmail || syncing) return;
+    setSyncing(true);
     setError(null);
     try {
-      const result = await call("search_emails", { query: `from:${contactEmail} OR to:${contactEmail}`, maxResults: 30 });
-      setEmails(result?.messages ?? []);
-      setFetched(true);
+      const result = await client.rpc(APP_ID, "sync_emails", {
+        contact_id: contactId,
+        contact_email: contactEmail,
+        // No `since` — backend will find the latest DB email automatically
+      });
+      await refetch();
+      setSyncInfo({ synced: result.synced, total: result.total });
+      if (result.synced > 0) {
+        toast.success(`${result.synced} new email${result.synced > 1 ? "s" : ""} synced`);
+      }
     } catch (e: any) {
-      setError(e?.message ?? "Failed to load emails");
+      setError(e?.message ?? "Failed to sync emails");
+      toast.error("Email sync failed");
     } finally {
-      setFetchLoading(false);
+      setSyncing(false);
     }
   };
 
-  if (integLoading) return <LoadingState variant="spinner" />;
+  if (integLoading || dbLoading) return <LoadingState variant="spinner" />;
 
   if (!connected) {
     return (
@@ -123,16 +141,28 @@ function GmailTab({ contactEmail }: { contactEmail?: string }) {
 
   return (
     <div className="flex flex-col h-full gap-3">
+      {/* Header row */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Emails with <span className="font-medium text-foreground">{contactEmail}</span>
-        </p>
-        <Button variant="outline" size="sm" onClick={fetchEmails} disabled={fetchLoading}>
-          <IconRefresh className={cn("h-4 w-4 mr-1.5", fetchLoading && "animate-spin")} />
-          {fetched ? "Refresh" : "Load emails"}
+        <div className="flex flex-col gap-0.5">
+          <p className="text-sm text-muted-foreground">
+            Emails with <span className="font-medium text-foreground">{contactEmail}</span>
+          </p>
+          {syncInfo && (
+            <p className="text-xs text-muted-foreground">
+              {syncInfo.total} email{syncInfo.total !== 1 ? "s" : ""} in DB
+              {syncInfo.synced > 0 && (
+                <span className="text-emerald-600 ml-1">· +{syncInfo.synced} new</span>
+              )}
+            </p>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
+          <IconRefresh className={cn("h-4 w-4 mr-1.5", syncing && "animate-spin")} />
+          {syncing ? "Syncing…" : "Refresh"}
         </Button>
       </div>
 
+      {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
           <IconAlertCircle className="h-4 w-4 shrink-0" />
@@ -140,16 +170,11 @@ function GmailTab({ contactEmail }: { contactEmail?: string }) {
         </div>
       )}
 
-      {!fetched && !fetchLoading && (
-        <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
-          <IconInbox className="h-8 w-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Click "Load emails" to fetch the conversation history.</p>
-        </div>
-      )}
+      {/* Spinner while syncing for first time (no emails yet) */}
+      {syncing && emails.length === 0 && <LoadingState variant="skeleton" />}
 
-      {fetchLoading && <LoadingState variant="skeleton" />}
-
-      {fetched && !fetchLoading && emails.length === 0 && (
+      {/* Empty state */}
+      {!syncing && emails.length === 0 && (
         <EmptyState
           icon={<IconMail className="h-8 w-8" />}
           title="No emails found"
@@ -157,7 +182,8 @@ function GmailTab({ contactEmail }: { contactEmail?: string }) {
         />
       )}
 
-      {fetched && !fetchLoading && emails.length > 0 && (
+      {/* Email list / detail */}
+      {emails.length > 0 && (
         <div className="flex flex-col gap-2 flex-1 overflow-hidden">
           {selectedEmail ? (
             <div className="flex flex-col gap-3">
@@ -174,13 +200,13 @@ function GmailTab({ contactEmail }: { contactEmail?: string }) {
                     <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
                       <span>From: {selectedEmail.from}</span>
                       <span>To: {selectedEmail.to}</span>
-                      <span>{selectedEmail.date}</span>
+                      <span>{new Date(selectedEmail.date).toLocaleString()}</span>
                     </div>
                   </div>
                 </CardHeader>
                 <Separator />
                 <CardContent className="pt-4">
-                  <p className="text-sm whitespace-pre-wrap">{selectedEmail.body ?? selectedEmail.snippet}</p>
+                  <p className="text-sm whitespace-pre-wrap">{selectedEmail.body || selectedEmail.snippet}</p>
                 </CardContent>
               </Card>
             </div>
@@ -195,7 +221,9 @@ function GmailTab({ contactEmail }: { contactEmail?: string }) {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-medium truncate">{email.subject || "(no subject)"}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">{email.date}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {new Date(email.date).toLocaleDateString()}
+                      </span>
                     </div>
                     <span className="text-xs text-muted-foreground truncate">{email.from}</span>
                     <span className="text-xs text-muted-foreground line-clamp-2">{email.snippet}</span>
@@ -365,7 +393,7 @@ export default function ContactDetail({ contactId, onBack }: Props) {
             </TabsList>
 
             <TabsContent value="emails" className="flex-1 overflow-hidden mt-4">
-              <GmailTab contactEmail={contact.email} />
+              <GmailTab contactId={contactId} contactEmail={contact.email} />
             </TabsContent>
 
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4">

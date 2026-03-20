@@ -11,6 +11,8 @@ out/
 
 # Tauri
 target/
+src-tauri/target/
+src-tauri/gen/
 src-tauri/vendor/
 src-tauri/resources/
 src-tauri/WixTools/

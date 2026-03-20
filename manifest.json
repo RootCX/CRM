@@ -41,6 +41,19 @@
       ]
     },
     {
+      "entityName": "contact_emails",
+      "fields": [
+        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" }, "required": true },
+        { "name": "gmail_id", "type": "text", "required": true },
+        { "name": "subject", "type": "text" },
+        { "name": "from", "type": "text" },
+        { "name": "to", "type": "text" },
+        { "name": "date", "type": "timestamp" },
+        { "name": "snippet", "type": "text" },
+        { "name": "body", "type": "text" }
+      ]
+    },
+    {
       "entityName": "activities",
       "fields": [
         { "name": "type", "type": "text", "required": true, "enum_values": ["Call", "Email", "Meeting", "Note", "Task"] },
@@ -62,7 +75,9 @@
       { "key": "deals.read", "description": "View deals" },
       { "key": "deals.write", "description": "Create and edit deals" },
       { "key": "activities.read", "description": "View activities" },
-      { "key": "activities.write", "description": "Create and edit activities" }
+      { "key": "activities.write", "description": "Create and edit activities" },
+      { "key": "contact_emails.read", "description": "View cached contact emails" },
+      { "key": "contact_emails.write", "description": "Store cached contact emails" }
     ]
   }
 }
