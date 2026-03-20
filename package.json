@@ -2,13 +2,17 @@
   "name": "crm",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "vite", "build": "vite build", "tauri": "tauri" },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "tauri": "tauri"
+  },
   "dependencies": {
-    "@rootcx/sdk": "latest",
+    "@rootcx/sdk": "^0.2.4",
     "@rootcx/ui": "latest",
     "@tabler/icons-react": "^3.30.0",
-    "@tauri-apps/plugin-shell": "^2.0.0",
     "@tailwindcss/vite": "^4.0.0",
+    "@tauri-apps/plugin-shell": "^2.0.0",
     "clsx": "^2.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
