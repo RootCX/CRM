@@ -1,7 +1,7 @@
 {
   "appId": "crm",
   "name": "CRM",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "A simple CRM to manage contacts, companies, and deals",
   "dataContract": [
     {
