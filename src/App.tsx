@@ -43,7 +43,7 @@ export default function App() {
               footer={
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col min-w-0">
-                    <span className="truncate text-sm font-medium">{user.username}</span>
+                    <span className="truncate text-sm font-medium">{user.email}</span>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => logout()}>
                     <IconLogout className="h-4 w-4" />
