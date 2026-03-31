@@ -6,6 +6,8 @@
   "dataContract": [
     {
       "entityName": "companies",
+      "identityKind": "organization",
+      "identityKey": "name",
       "fields": [
         { "name": "name", "type": "text", "required": true },
         { "name": "industry", "type": "text", "enum_values": ["Technology", "Finance", "Healthcare", "Retail", "Manufacturing", "Real Estate", "Education", "Other"] },

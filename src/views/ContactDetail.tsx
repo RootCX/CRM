@@ -75,7 +75,7 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
 }
 
 function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
-  const { connected, loading: integLoading, connect } = useIntegration(APP_ID, "gmail");
+  const { connected, loading: integLoading, connect } = useIntegration("gmail");
   const { data: storedEmails, loading: dbLoading, refetch } = useAppCollection<StoredEmail>(APP_ID, "contact_emails");
   const client = useRuntimeClient();
 
