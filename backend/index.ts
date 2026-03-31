@@ -1,7 +1,7 @@
 import { createInterface } from "readline";
 
 const APP_ID = "crm";
-const GMAIL = `/api/v1/apps/${APP_ID}/integrations/gmail/actions`;
+const GMAIL = "/api/v1/integrations/gmail/actions";
 const COL = `/api/v1/apps/${APP_ID}/collections/contact_emails`;
 
 const write = (m: unknown) => process.stdout.write(JSON.stringify(m) + "\n");
