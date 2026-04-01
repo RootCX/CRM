@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "package": "npm run package:frontend && npm run package:backend",
+    "package:frontend": "vite build && tar czf crm-frontend.tar.gz -C dist .",
+    "package:backend": "tar czf crm-backend.tar.gz -C backend .",
     "tauri": "tauri"
   },
   "dependencies": {
