@@ -7,21 +7,21 @@ import {
 } from "@rootcx/ui";
 import {
   IconLogout, IconUsers, IconBuilding, IconCurrencyDollar,
-  IconChecklist, IconLayoutDashboard, IconNotes,
+  IconChecklist, IconNotes, IconDatabase,
 } from "@tabler/icons-react";
 
-import Dashboard      from "./views/Dashboard";
 import ContactsView   from "./views/ContactsView";
 import ContactDetail  from "./views/ContactDetail";
 import CompaniesView  from "./views/CompaniesView";
 import DealsView      from "./views/DealsView";
 import ActivitiesView from "./views/ActivitiesView";
 import NotesView      from "./views/NotesView";
+import SeedView       from "./views/SeedView";
 
-type View = "dashboard" | "contacts" | "contact_detail" | "companies" | "deals" | "activities" | "notes";
+type View = "contacts" | "contact_detail" | "companies" | "deals" | "activities" | "notes" | "seed";
 
 export default function App() {
-  const [view, setView]                         = useState<View>("dashboard");
+  const [view, setView]                         = useState<View>("contacts");
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
 
   const navigateToContact = (id: string) => {
@@ -50,9 +50,6 @@ export default function App() {
                 </div>
               }
             >
-              <SidebarSection>
-                <SidebarItem icon={<IconLayoutDashboard className="h-4 w-4" />} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
-              </SidebarSection>
               <SidebarSection title="Sales">
                 <SidebarItem icon={<IconUsers className="h-4 w-4" />}          label="Contacts"   active={view === "contacts" || view === "contact_detail"} onClick={() => setView("contacts")} />
                 <SidebarItem icon={<IconBuilding className="h-4 w-4" />}       label="Companies"  active={view === "companies"}  onClick={() => setView("companies")} />
@@ -60,17 +57,20 @@ export default function App() {
                 <SidebarItem icon={<IconChecklist className="h-4 w-4" />}      label="Activities" active={view === "activities"} onClick={() => setView("activities")} />
                 <SidebarItem icon={<IconNotes className="h-4 w-4" />}          label="Notes"      active={view === "notes"}      onClick={() => setView("notes")} />
               </SidebarSection>
+              <SidebarSection title="Dev">
+                <SidebarItem icon={<IconDatabase className="h-4 w-4" />} label="Seed Data" active={view === "seed"} onClick={() => setView("seed")} />
+              </SidebarSection>
             </Sidebar>
           </AppShellSidebar>
 
           <AppShellMain>
-            {view === "dashboard"      && <Dashboard onNavigate={setView} />}
             {view === "contacts"       && <ContactsView onSelectContact={navigateToContact} />}
             {view === "contact_detail" && selectedContactId && <ContactDetail contactId={selectedContactId} onBack={() => setView("contacts")} />}
             {view === "companies"      && <CompaniesView />}
             {view === "deals"          && <DealsView />}
             {view === "activities"     && <ActivitiesView />}
             {view === "notes"          && <NotesView />}
+            {view === "seed"           && <SeedView />}
           </AppShellMain>
 
           <Toaster />
