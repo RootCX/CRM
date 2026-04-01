@@ -24,11 +24,10 @@ interface Activity {
 }
 
 const TYPE_STYLES: Record<string, string> = {
-  Call: "bg-blue-100 text-blue-700",
-  Email: "bg-violet-100 text-violet-700",
+  Call:    "bg-blue-100 text-blue-700",
+  Email:   "bg-violet-100 text-violet-700",
   Meeting: "bg-emerald-100 text-emerald-700",
-  Note: "bg-yellow-100 text-yellow-700",
-  Task: "bg-orange-100 text-orange-700",
+  Task:    "bg-orange-100 text-orange-700",
 };
 
 export default function ActivitiesView() {
@@ -114,7 +113,7 @@ export default function ActivitiesView() {
   const formFields = [
     {
       name: "type", label: "Type", type: "select" as const, required: true,
-      options: ["Call", "Email", "Meeting", "Note", "Task"].map(t => ({ label: t, value: t })),
+      options: ["Call", "Email", "Meeting", "Task"].map(t => ({ label: t, value: t })),
     },
     { name: "subject", label: "Subject", type: "text" as const, required: true },
     { name: "body", label: "Description", type: "textarea" as const },
