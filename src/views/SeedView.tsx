@@ -15,7 +15,7 @@ import {
   Button, Card, CardContent, CardHeader, CardTitle, CardDescription,
   Badge, Separator, toast, ConfirmDialog,
 } from "@rootcx/ui";
-import { IconDatabase, IconCheck, IconX, IconLoader2, IconPlayerPlay, IconBuildingSkyscraper, IconTrash } from "@tabler/icons-react";
+import { IconCheck, IconX, IconLoader2, IconPlayerPlay, IconBuildingSkyscraper, IconTrash } from "@tabler/icons-react";
 
 const APP_ID = "crm";
 
@@ -678,25 +678,7 @@ export default function SeedView() {
   const hasData     = totalExisting > 0;
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full p-8">
-      <div className="w-full max-w-xl space-y-6">
-
-        {/* Header */}
-        <div className="text-center space-y-2">
-          <div className="flex justify-center">
-            <div className="p-3 rounded-full bg-primary/10">
-              <IconDatabase className="h-8 w-8 text-primary" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold">Seed Demo Data</h1>
-          <p className="text-muted-foreground text-sm max-w-md mx-auto">
-            Populates a complete, coherent B2B SaaS sales scenario —
-            <strong> 12 enterprise accounts</strong>, 36 contacts, 20 deals across a
-            $700K+ pipeline, with rich notes and activity history for a full sales team.
-          </p>
-        </div>
-
-        {/* Seed card */}
+    <div className="w-full max-w-xl space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
@@ -827,7 +809,6 @@ export default function SeedView() {
             All data has been deleted. You can run the seed again.
           </p>
         )}
-      </div>
 
       <ConfirmDialog
         open={deleteConfirmOpen}
