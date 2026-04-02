@@ -9,7 +9,7 @@ import {
 } from "@rootcx/ui";
 import {
   IconLogout, IconUsers, IconBuilding, IconCurrencyDollar,
-  IconChecklist, IconNotes, IconSettings, IconChevronUp,
+  IconChecklist, IconSettings, IconChevronUp,
 } from "@tabler/icons-react";
 
 import ContactsView   from "./views/ContactsView";
@@ -17,10 +17,9 @@ import ContactDetail  from "./views/ContactDetail";
 import CompaniesView  from "./views/CompaniesView";
 import DealsView      from "./views/DealsView";
 import ActivitiesView from "./views/ActivitiesView";
-import NotesView      from "./views/NotesView";
 import SeedView       from "./views/SeedView";
 
-type View = "contacts" | "contact_detail" | "companies" | "deals" | "activities" | "notes" | "settings";
+type View = "contacts" | "contact_detail" | "companies" | "deals" | "activities" | "settings";
 
 export default function App() {
   const [view, setView]                           = useState<View>("contacts");
@@ -70,7 +69,6 @@ export default function App() {
                 <SidebarItem icon={<IconBuilding className="h-4 w-4" />}       label="Companies"  active={view === "companies"}  onClick={() => setView("companies")} />
                 <SidebarItem icon={<IconCurrencyDollar className="h-4 w-4" />} label="Deals"      active={view === "deals"}      onClick={() => setView("deals")} />
                 <SidebarItem icon={<IconChecklist className="h-4 w-4" />}      label="Activities" active={view === "activities"} onClick={() => setView("activities")} />
-                <SidebarItem icon={<IconNotes className="h-4 w-4" />}          label="Notes"      active={view === "notes"}      onClick={() => setView("notes")} />
               </SidebarSection>
             </Sidebar>
           </AppShellSidebar>
@@ -81,7 +79,6 @@ export default function App() {
             {view === "companies"      && <CompaniesView />}
             {view === "deals"          && <DealsView />}
             {view === "activities"     && <ActivitiesView />}
-            {view === "notes"          && <NotesView />}
             {view === "settings"       && <SettingsView />}
           </AppShellMain>
 

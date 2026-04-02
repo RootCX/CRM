@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
-import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, StatusBadge, Button, toast } from "@rootcx/ui";
+import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, StatusBadge, Button, SearchInput, toast } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconUsers } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
 import type { Company, Contact } from "@/lib/types";
+import { mergeWhere, buildSearchClause } from "@/lib/search";
 
 const APP_ID = "crm";
 
@@ -30,11 +31,12 @@ const CONTACT_FORM_FIELDS = [
 
 export default function ContactsView({ onSelectContact }: { onSelectContact: (id: string) => void }) {
   const [filters, setFilters]       = useState<ActiveFilter[]>([]);
+  const [search, setSearch]         = useState("");
   const [formOpen, setFormOpen]     = useState(false);
   const [editTarget, setEditTarget] = useState<Contact | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
 
-  const where = buildWhereClause(filters);
+  const where = mergeWhere(buildWhereClause(filters), buildSearchClause(search, ["first_name", "last_name", "email", "job_title"]));
   const { data: contacts, loading, create, update, remove } = useAppCollection<Contact>(APP_ID, "contacts", where ? { where } : undefined);
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
 
@@ -82,7 +84,7 @@ export default function ContactsView({ onSelectContact }: { onSelectContact: (id
     catch { toast.error("Failed to delete contact"); }
   };
 
-  const filtered = filters.length > 0;
+  const filtered = filters.length > 0 || !!search;
 
   return (
     <div className="p-6 space-y-4">
@@ -90,9 +92,12 @@ export default function ContactsView({ onSelectContact }: { onSelectContact: (id
         title="Contacts" description="Manage your contacts and leads"
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Contact</Button>}
       />
-      <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+      <div className="flex items-center gap-3">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search contacts…" debounceMs={300} />
+        <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+      </div>
       <DataTable
-        data={contacts} columns={columns} loading={loading} searchable pageSize={15} selectable
+        data={contacts} columns={columns} loading={loading} pageSize={15} selectable
         onRowClick={row => onSelectContact(row.id)}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },

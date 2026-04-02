@@ -2,26 +2,17 @@ import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState,
-  Badge, Switch, toast,
+  SearchInput, Button, toast,
 } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconChecklist, IconCheck } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
+import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
+import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import type { Contact, Deal, Activity } from "@/lib/types";
+import { mergeWhere, buildSearchClause } from "@/lib/search";
 
 const APP_ID = "crm";
-
-interface Contact { id: string; first_name: string; last_name: string; }
-interface Deal { id: string; title: string; }
-interface Activity {
-  id: string;
-  type: string;
-  subject: string;
-  body: string;
-  contact_id: string;
-  deal_id: string;
-  due_date: string;
-  done: boolean;
-}
 
 const TYPE_STYLES: Record<string, string> = {
   Call:    "bg-blue-100 text-blue-700",
@@ -30,27 +21,33 @@ const TYPE_STYLES: Record<string, string> = {
   Task:    "bg-orange-100 text-orange-700",
 };
 
-export default function ActivitiesView() {
-  const { data: activities, loading, create, update, remove } = useAppCollection<Activity>(APP_ID, "activities");
-  const { data: contacts } = useAppCollection<Contact>(APP_ID, "contacts");
-  const { data: deals } = useAppCollection<Deal>(APP_ID, "deals");
+const ACTIVITY_FILTER_FIELDS: FilterFieldDef[] = [
+  { key: "type",     label: "Type",    type: "enum", options: ["Call", "Email", "Meeting", "Task"].map(t => ({ label: t, value: t })) },
+  { key: "due_date", label: "Due date", type: "date" },
+];
 
-  const [formOpen, setFormOpen] = useState(false);
+export default function ActivitiesView() {
+  const [filters, setFilters]       = useState<ActiveFilter[]>([]);
+  const [search, setSearch]         = useState("");
+  const [filterDone, setFilterDone] = useState<"all" | "pending" | "done">("all");
+  const [formOpen, setFormOpen]     = useState(false);
   const [editTarget, setEditTarget] = useState<Activity | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null);
-  const [filterDone, setFilterDone] = useState<"all" | "pending" | "done">("all");
+
+  const doneClause = filterDone === "pending" ? { done: { $eq: false } }
+                   : filterDone === "done"    ? { done: { $eq: true  } }
+                   : undefined;
+  const where = mergeWhere(mergeWhere(buildWhereClause(filters), doneClause), buildSearchClause(search, ["subject", "body"]));
+
+  const { data: activities, loading, create, update, remove } = useAppCollection<Activity>(APP_ID, "activities", where ? { where } : undefined);
+  const { data: contacts } = useAppCollection<Contact>(APP_ID, "contacts");
+  const { data: deals }    = useAppCollection<Deal>(APP_ID, "deals");
 
   const contactName = (id: string) => {
     const c = contacts.find(c => c.id === id);
     return c ? `${c.first_name} ${c.last_name}` : "—";
   };
   const dealName = (id: string) => deals.find(d => d.id === id)?.title ?? "—";
-
-  const filteredActivities = activities.filter(a => {
-    if (filterDone === "pending") return !a.done;
-    if (filterDone === "done") return a.done;
-    return true;
-  });
 
   const columns: ColumnDef<Activity, unknown>[] = [
     {
@@ -155,47 +152,41 @@ export default function ActivitiesView() {
     }
   };
 
-  const pendingCount = activities.filter(a => !a.done).length;
+  const pendingCount = filterDone === "all" ? activities.filter(a => !a.done).length : activities.length;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-4">
       <PageHeader
         title="Activities"
-        description={`${pendingCount} pending ${pendingCount === 1 ? "activity" : "activities"}`}
-        actions={
-          <button
-            onClick={() => { setEditTarget(null); setFormOpen(true); }}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            <IconPlus className="h-4 w-4" /> Log Activity
-          </button>
-        }
+        description={filterDone === "pending" ? `${activities.length} pending ${activities.length === 1 ? "activity" : "activities"}` : "Log and track your sales activities"}
+        actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Log Activity</Button>}
       />
 
-      {/* Filter tabs */}
-      <div className="flex gap-2">
-        {(["all", "pending", "done"] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilterDone(f)}
-            className={cn(
-              "px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors",
-              filterDone === f
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            )}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="flex items-center gap-3 flex-wrap">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search activities…" debounceMs={300} />
+        <div className="flex gap-2">
+          {(["all", "pending", "done"] as const).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilterDone(f)}
+              className={cn(
+                "px-3 py-1.5 rounded-md text-sm font-medium capitalize transition-colors",
+                filterDone === f
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+        <FilterBuilder fields={ACTIVITY_FILTER_FIELDS} filters={filters} onChange={setFilters} />
       </div>
 
       <DataTable
-        data={filteredActivities}
+        data={activities}
         columns={columns}
         loading={loading}
-        searchable
-        pagination
         pageSize={15}
         selectable
         rowActions={[
@@ -226,14 +217,7 @@ export default function ActivitiesView() {
             icon={<IconChecklist className="h-8 w-8" />}
             title="No activities"
             description="Log calls, emails, meetings, and tasks"
-            action={
-              <button
-                onClick={() => { setEditTarget(null); setFormOpen(true); }}
-                className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground"
-              >
-                <IconPlus className="h-4 w-4" /> Log Activity
-              </button>
-            }
+            action={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Log Activity</Button>}
           />
         }
       />

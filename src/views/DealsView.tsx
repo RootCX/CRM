@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
-import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, Tabs, TabsList, TabsTrigger, TabsContent, Card, CardContent, Button, Separator, toast } from "@rootcx/ui";
+import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, Tabs, TabsList, TabsTrigger, TabsContent, Card, CardContent, Button, Separator, SearchInput, toast } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconCurrencyDollar, IconNotes } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { NotesTab } from "@/components/notes/NotesTab";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
 import type { Contact, Company, Deal } from "@/lib/types";
+import { mergeWhere, buildSearchClause } from "@/lib/search";
 
 const APP_ID = "crm";
 const STAGES = ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"] as const;
@@ -51,12 +52,13 @@ function DealDetail({ deal, contactName, companyName, onBack, onEdit }: {
 
 export default function DealsView() {
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
+  const [search, setSearch]             = useState("");
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Deal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Deal | null>(null);
 
-  const where = buildWhereClause(filters);
+  const where = mergeWhere(buildWhereClause(filters), buildSearchClause(search, ["title"]));
   const { data: deals, loading, create, update, remove } = useAppCollection<Deal>(APP_ID, "deals", where ? { where } : undefined);
   const { data: contacts }  = useAppCollection<Contact>(APP_ID, "contacts");
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
@@ -123,7 +125,7 @@ export default function DealsView() {
     />
   );
 
-  const filtered = filters.length > 0;
+  const filtered = filters.length > 0 || !!search;
   const totalPipelineValue = deals.filter(d => PIPELINE_STAGES.includes(d.stage as typeof PIPELINE_STAGES[number])).reduce((s, d) => s + (d.value ?? 0), 0);
 
   return (
@@ -139,9 +141,12 @@ export default function DealsView() {
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
           </TabsList>
           <TabsContent value="list" className="space-y-4 mt-0">
-            <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+            <div className="flex items-center gap-3">
+              <SearchInput value={search} onChange={setSearch} placeholder="Search deals…" debounceMs={300} />
+              <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+            </div>
             <DataTable
-              data={deals} columns={columns} loading={loading} searchable pageSize={15} selectable
+              data={deals} columns={columns} loading={loading} pageSize={15} selectable
               onRowClick={row => setSelectedId(row.id)}
               rowActions={[
                 { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
-import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, Tabs, TabsList, TabsTrigger, TabsContent, Button, Separator, toast } from "@rootcx/ui";
+import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, Tabs, TabsList, TabsTrigger, TabsContent, Button, Separator, SearchInput, toast } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconBuilding, IconNotes, IconWorld, IconPhone, IconMapPin } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { NotesTab } from "@/components/notes/NotesTab";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
 import type { Company } from "@/lib/types";
+import { mergeWhere, buildSearchClause } from "@/lib/search";
 
 const APP_ID = "crm";
 
@@ -96,12 +97,13 @@ function CompanyDetail({ company, onBack, onEdit }: { company: Company; onBack: 
 
 export default function CompaniesView() {
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
+  const [search, setSearch]             = useState("");
   const [selectedId, setSelectedId]     = useState<string | null>(null);
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Company | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
 
-  const where = buildWhereClause(filters);
+  const where = mergeWhere(buildWhereClause(filters), buildSearchClause(search, ["name", "industry", "website", "address"]));
   const { data: companies, loading, create, update, remove } = useAppCollection<Company>(APP_ID, "companies", where ? { where } : undefined);
 
   const selected = companies.find(c => c.id === selectedId) ?? null;
@@ -145,7 +147,7 @@ export default function CompaniesView() {
 
   if (selected) return <CompanyDetail company={selected} onBack={() => setSelectedId(null)} onEdit={() => openEdit(selected)} />;
 
-  const filtered = filters.length > 0;
+  const filtered = filters.length > 0 || !!search;
 
   return (
     <div className="p-6 space-y-4">
@@ -153,9 +155,12 @@ export default function CompaniesView() {
         title="Companies" description="Manage the companies in your pipeline"
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Company</Button>}
       />
-      <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
+      <div className="flex items-center gap-3">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search companies…" debounceMs={300} />
+        <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
+      </div>
       <DataTable
-        data={companies} columns={columns} loading={loading} searchable pageSize={15} selectable
+        data={companies} columns={columns} loading={loading} pageSize={15} selectable
         onRowClick={row => setSelectedId(row.id)}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => openEdit(row) },
