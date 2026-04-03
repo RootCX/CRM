@@ -5,12 +5,12 @@ import {
   Sidebar, SidebarItem, SidebarSection,
   Tabs, TabsList, TabsTrigger, TabsContent,
   Toaster, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, Separator,
+  DropdownMenuTrigger, Separator, useTheme,
 } from "@rootcx/ui";
 import {
   IconLogout, IconUsers, IconBuilding, IconCurrencyDollar, IconChecklist,
   IconSettings, IconChevronUp, IconNotes, IconUser, IconBuildingSkyscraper,
-  IconDatabase,
+  IconDatabase, IconSun, IconMoon,
 } from "@tabler/icons-react";
 import ContactsView   from "./views/ContactsView";
 import ContactDetail  from "./views/ContactDetail";
@@ -73,6 +73,7 @@ function MainContent({ nav, go }: { nav: NavState; go: (v: View, id?: string) =>
 
 function AppSidebar({ user, logout, nav, go }: { user: any; logout: () => void; nav: NavState; go: (v: View, id?: string) => void }) {
   const { data: favorites } = useAppCollection<Favorite>(APP_ID, "favorites", { orderBy: "position", order: "asc" });
+  const { theme, setTheme } = useTheme();
 
   // A view is "active" if it matches, including its detail sub-view
   const active = (v: View) =>
@@ -99,6 +100,10 @@ function AppSidebar({ user, logout, nav, go }: { user: any; logout: () => void; 
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
             <DropdownMenuItem onClick={() => go("settings")}><IconSettings className="h-4 w-4 mr-2" /> Settings</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              {theme === "dark" ? <IconSun className="h-4 w-4 mr-2" /> : <IconMoon className="h-4 w-4 mr-2" />}
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </DropdownMenuItem>
             <Separator className="my-1" />
             <DropdownMenuItem onClick={logout} className="text-destructive focus:text-destructive"><IconLogout className="h-4 w-4 mr-2" /> Log out</DropdownMenuItem>
           </DropdownMenuContent>
