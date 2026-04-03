@@ -2927,21 +2927,26 @@ dependencies = [
 
 [[package]]
 name = "rootcx-client"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36dd5b2e95eda8f31201cf06fc339a9738937d660b8742c78036bc5a5e9cbf99"
+checksum = "bd9252fb04dbf057f52bc4481aba6bde1a1dd262dae64dd5aed67628fc949baa"
 dependencies = [
  "reqwest 0.12.28",
  "rootcx-types",
+ "serde",
  "serde_json",
+ "tauri",
+ "tauri-plugin-shell",
  "thiserror 2.0.18",
+ "tokio",
+ "urlencoding",
 ]
 
 [[package]]
 name = "rootcx-types"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8a22ebf6ac9fe691e90e866b633b4cf6cc2d07deb44a228bdbb946f3e4c70c0"
+checksum = "dc989a816504ed213306e5b21ead7f3277dabd91a0f7fe6abc679bfef936daf9"
 dependencies = [
  "serde",
  "serde_json",
@@ -4324,6 +4329,12 @@ dependencies = [
  "serde",
  "serde_derive",
 ]
+
+[[package]]
+name = "urlencoding"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
 name = "urlpattern"

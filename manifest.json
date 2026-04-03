@@ -1,40 +1,61 @@
 {
   "appId": "crm",
   "name": "CRM",
-  "version": "0.2.0",
-  "description": "A simple CRM to manage contacts, companies, and deals",
+  "version": "0.3.0",
+  "description": "A full-featured CRM to manage contacts, companies, deals, activities, and notes",
   "dataContract": [
     {
       "entityName": "companies",
       "fields": [
-        { "name": "name",     "type": "text", "required": true },
-        { "name": "industry", "type": "text", "enum_values": ["Technology", "Finance", "Healthcare", "Retail", "Manufacturing", "Real Estate", "Education", "Other"] },
-        { "name": "website",  "type": "text" },
-        { "name": "phone",    "type": "text" },
-        { "name": "address",  "type": "text" }
+        { "name": "name",                    "type": "text",    "required": true },
+        { "name": "domain_name",             "type": "text" },
+        { "name": "industry",                "type": "text",    "enum_values": ["Technology", "Finance", "Healthcare", "Retail", "Manufacturing", "Real Estate", "Education", "Other"] },
+        { "name": "employees",               "type": "number" },
+        { "name": "annual_recurring_revenue","type": "number" },
+        { "name": "ideal_customer_profile",  "type": "boolean" },
+        { "name": "description",             "type": "text" },
+        { "name": "website",                 "type": "text" },
+        { "name": "phone",                   "type": "text" },
+        { "name": "address",                 "type": "text" },
+        { "name": "linkedin_url",            "type": "text" }
       ]
     },
     {
       "entityName": "contacts",
       "fields": [
-        { "name": "first_name",  "type": "text", "required": true },
-        { "name": "last_name",   "type": "text", "required": true },
-        { "name": "email",       "type": "text" },
-        { "name": "phone",       "type": "text" },
-        { "name": "job_title",   "type": "text" },
-        { "name": "company_id",  "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
-        { "name": "status",      "type": "text", "enum_values": ["Lead", "Prospect", "Customer", "Churned"] }
+        { "name": "first_name",    "type": "text",   "required": true },
+        { "name": "last_name",     "type": "text",   "required": true },
+        { "name": "email",         "type": "text" },
+        { "name": "phone",         "type": "text" },
+        { "name": "job_title",     "type": "text" },
+        { "name": "city",          "type": "text" },
+        { "name": "avatar_url",    "type": "text" },
+        { "name": "linkedin_url",  "type": "text" },
+        { "name": "twitter_handle","type": "text" },
+        { "name": "company_id",    "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "status",        "type": "text",   "enum_values": ["Lead", "Prospect", "Customer", "Churned"] }
       ]
     },
     {
       "entityName": "deals",
       "fields": [
-        { "name": "title",      "type": "text",   "required": true },
-        { "name": "value",      "type": "number" },
-        { "name": "stage",      "type": "text",   "required": true, "enum_values": ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"] },
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
-        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
-        { "name": "close_date", "type": "date" }
+        { "name": "title",       "type": "text",   "required": true },
+        { "name": "value",       "type": "number" },
+        { "name": "currency",    "type": "text",   "enum_values": ["USD", "EUR", "GBP", "CHF", "CAD", "AUD", "JPY"] },
+        { "name": "probability", "type": "number" },
+        { "name": "stage",       "type": "text",   "required": true, "enum_values": ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"] },
+        { "name": "source",      "type": "text",   "enum_values": ["Inbound", "Outbound", "Referral", "Partner", "Event", "Other"] },
+        { "name": "contact_id",  "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id",  "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "close_date",  "type": "date" },
+        { "name": "position",    "type": "number" }
+      ]
+    },
+    {
+      "entityName": "deal_contacts",
+      "fields": [
+        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",    "field": "id" }, "required": true },
+        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" }, "required": true }
       ]
     },
     {
@@ -67,10 +88,20 @@
         { "name": "type",       "type": "text", "required": true, "enum_values": ["Call", "Email", "Meeting", "Task"] },
         { "name": "subject",    "type": "text", "required": true },
         { "name": "body",       "type": "text" },
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" } },
-        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",    "field": "id" } },
+        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",     "field": "id" } },
         { "name": "due_date",   "type": "date" },
         { "name": "done",       "type": "boolean" }
+      ]
+    },
+    {
+      "entityName": "favorites",
+      "fields": [
+        { "name": "entity_type", "type": "text", "required": true, "enum_values": ["contact", "company", "deal"] },
+        { "name": "entity_id",   "type": "text", "required": true },
+        { "name": "label",       "type": "text" },
+        { "name": "position",    "type": "number" }
       ]
     }
   ],
@@ -82,12 +113,16 @@
       { "key": "contacts.write",      "description": "Create and edit contacts" },
       { "key": "deals.read",          "description": "View deals" },
       { "key": "deals.write",         "description": "Create and edit deals" },
+      { "key": "deal_contacts.read",  "description": "View deal-contact relations" },
+      { "key": "deal_contacts.write", "description": "Manage deal-contact relations" },
       { "key": "notes.read",          "description": "View notes" },
       { "key": "notes.write",         "description": "Create and edit notes" },
       { "key": "activities.read",     "description": "View activities" },
       { "key": "activities.write",    "description": "Create and edit activities" },
       { "key": "contact_emails.read", "description": "View cached contact emails" },
-      { "key": "contact_emails.write","description": "Store cached contact emails" }
+      { "key": "contact_emails.write","description": "Store cached contact emails" },
+      { "key": "favorites.read",      "description": "View favorites" },
+      { "key": "favorites.write",     "description": "Manage favorites" }
     ]
   }
 }
