@@ -17,11 +17,11 @@ It includes:
 - **Enterprise governance**: all data operations go through RootCX, ensuring role-based access control,
   full audit history, and multi-user collaboration out of the box
 
-## Malleable software
+## Elastic software
 
 This app is designed to be forked, adapted, and made your own. The entire source code is here:
 use it as-is for your CRM needs, or take it as a starting point and reshape it to fit your
-business. Add fields, change workflows, plug in your own integrations. That's the point of malleable
+business. Add fields, change workflows, plug in your own integrations. That's the point of elastic
 software: you own it, you shape it.
 
 ## Getting started
