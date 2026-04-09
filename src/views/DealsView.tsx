@@ -7,7 +7,7 @@ import {
 } from "@rootcx/ui";
 import {
   IconPlus, IconEdit, IconTrash, IconCurrencyDollar, IconNotes,
-  IconUsers, IconChecklist, IconStarFilled, IconStar,
+  IconUsers, IconChecklist, IconStarFilled, IconStar, IconInfoCircle,
 } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
@@ -112,9 +112,31 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
     </div>
   );
 
+  const sidebarContent = (
+    <>
+      <div><p className="text-xs text-muted-foreground mb-1">Stage</p><span className={cn("text-xs px-2 py-0.5 rounded-full font-medium border", STAGE_STYLES[deal.stage] ?? "bg-gray-100 text-gray-700 border-gray-200")}>{deal.stage}</span></div>
+      {deal.value != null && <div><p className="text-xs text-muted-foreground mb-1">Value</p><p className="text-xl font-bold text-emerald-600">{sym}{deal.value.toLocaleString()}</p></div>}
+      {deal.probability != null && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Probability</p>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${deal.probability}%` }} /></div>
+            <span className="text-xs font-medium shrink-0">{deal.probability}%</span>
+          </div>
+          {expectedRevenue != null && <p className="text-xs text-muted-foreground mt-0.5">Expected: <span className="font-medium text-foreground">{sym}{expectedRevenue.toLocaleString()}</span></p>}
+        </div>
+      )}
+      {deal.source     && <div><p className="text-xs text-muted-foreground mb-1">Source</p><span className="text-sm">{deal.source}</span></div>}
+      {deal.close_date && <div><p className="text-xs text-muted-foreground mb-1">Expected Close</p><p className="text-sm">{deal.close_date}</p></div>}
+      <Separator />
+      {contact && <EntityLink label="Primary Contact" name={`${contact.first_name} ${contact.last_name}`} avatar={contact.avatar_url} id={contact.id} onNav={onNavigateContact} />}
+      {company && <EntityLink label="Company" name={company.name} id={company.id} onNav={onNavigateCompany} />}
+    </>
+  );
+
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 pb-4">
+      <div className="p-4 md:p-6 md:pb-4">
         <PageHeader title={deal.title}
           description={[contact ? `${contact.first_name} ${contact.last_name}` : null, company?.name].filter(Boolean).join(" · ") || "No details"}
           onBack={onBack}
@@ -129,32 +151,17 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
         />
       </div>
 
-      <div className="flex flex-1 gap-0 overflow-hidden px-6 pb-6">
-        <div className="flex flex-col gap-3 w-56 shrink-0 pr-6 overflow-y-auto py-1">
-          <div><p className="text-xs text-muted-foreground mb-1">Stage</p><span className={cn("text-xs px-2 py-0.5 rounded-full font-medium border", STAGE_STYLES[deal.stage] ?? "bg-gray-100 text-gray-700 border-gray-200")}>{deal.stage}</span></div>
-          {deal.value != null && <div><p className="text-xs text-muted-foreground mb-1">Value</p><p className="text-xl font-bold text-emerald-600">{sym}{deal.value.toLocaleString()}</p></div>}
-          {deal.probability != null && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Probability</p>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${deal.probability}%` }} /></div>
-                <span className="text-xs font-medium shrink-0">{deal.probability}%</span>
-              </div>
-              {expectedRevenue != null && <p className="text-xs text-muted-foreground mt-0.5">Expected: <span className="font-medium text-foreground">{sym}{expectedRevenue.toLocaleString()}</span></p>}
-            </div>
-          )}
-          {deal.source     && <div><p className="text-xs text-muted-foreground mb-1">Source</p><span className="text-sm">{deal.source}</span></div>}
-          {deal.close_date && <div><p className="text-xs text-muted-foreground mb-1">Expected Close</p><p className="text-sm">{deal.close_date}</p></div>}
-          <Separator />
-          {contact && <EntityLink label="Primary Contact" name={`${contact.first_name} ${contact.last_name}`} avatar={contact.avatar_url} id={contact.id} onNav={onNavigateContact} />}
-          {company && <EntityLink label="Company" name={company.name} id={company.id} onNav={onNavigateCompany} />}
+      <div className="flex flex-1 gap-0 overflow-hidden px-4 md:px-6 pb-6">
+        <div className="hidden md:flex flex-col gap-3 w-56 shrink-0 pr-6 overflow-y-auto py-1">
+          {sidebarContent}
         </div>
 
-        <Separator orientation="vertical" />
+        <Separator orientation="vertical" className="hidden md:block" />
 
-        <div className="flex flex-col flex-1 overflow-hidden pl-6">
+        <div className="flex flex-col flex-1 overflow-hidden md:pl-6">
           <Tabs defaultValue="notes" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="w-fit shrink-0">
+            <TabsList className="w-fit max-w-full shrink-0 overflow-x-auto">
+              <TabsTrigger value="details" className="md:hidden"><IconInfoCircle className="h-4 w-4 mr-1.5" /> Details</TabsTrigger>
               <TabsTrigger value="notes"><IconNotes className="h-4 w-4 mr-1.5" /> Notes</TabsTrigger>
               <TabsTrigger value="activities">
                 <IconChecklist className="h-4 w-4 mr-1.5" /> Activities
@@ -162,6 +169,9 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
               </TabsTrigger>
               <TabsTrigger value="people"><IconUsers className="h-4 w-4 mr-1.5" /> People</TabsTrigger>
             </TabsList>
+            <TabsContent value="details" className="md:hidden flex-1 overflow-y-auto mt-4">
+              <div className="flex flex-col gap-3 pb-4">{sidebarContent}</div>
+            </TabsContent>
             <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="deal_id" filterId={deal.id} /></TabsContent>
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="deal_id" filterId={deal.id} /></TabsContent>
             <TabsContent value="people"     className="flex-1 overflow-hidden mt-4">
@@ -270,7 +280,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
   const totalPipelineValue = deals.filter(d => PIPELINE_STAGES.includes(d.stage)).reduce((s, d) => s + (d.value ?? 0), 0);
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="Deals" description="Track your sales pipeline and close deals"
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Deal</Button>}
       />
@@ -282,7 +292,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
           </TabsList>
 
           <TabsContent value="list" className="space-y-4 mt-0">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <SearchInput value={search} onChange={setSearch} placeholder="Search deals…" debounceMs={300} />
               <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
             </div>
@@ -301,7 +311,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
               <IconCurrencyDollar className="h-4 w-4" />
               Pipeline value: <strong className="text-foreground">${totalPipelineValue.toLocaleString()}</strong>
             </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:grid-cols-4">
               {PIPELINE_STAGES.map(stage => {
                 const stageDeals = deals.filter(d => d.stage === stage);
                 const stageValue = stageDeals.reduce((s, d) => s + (d.value ?? 0), 0);

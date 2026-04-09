@@ -91,11 +91,11 @@ export default function ContactsView({ onSelectContact }: { onSelectContact: (id
   const filtered = filters.length > 0 || !!search;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="Contacts" description="Manage your contacts and leads"
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Contact</Button>}
       />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search contacts…" debounceMs={300} />
         <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
       </div>

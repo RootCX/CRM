@@ -11,7 +11,7 @@ import {
   IconEdit, IconTrash, IconMail, IconPhone, IconBriefcase, IconBuilding,
   IconNotes, IconRefresh, IconAlertCircle, IconPlugConnected, IconMapPin,
   IconBrandLinkedin, IconBrandTwitter, IconStar, IconStarFilled,
-  IconChecklist, IconCurrencyDollar,
+  IconChecklist, IconCurrencyDollar, IconUser,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { NotesTab } from "@/components/notes/NotesTab";
@@ -202,9 +202,55 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
     { name: "status",         label: "Status",       type: "select" as const, options: ["Lead","Prospect","Customer","Churned"].map(s => ({ label: s, value: s })) },
   ];
 
+  const sidebarContent = (
+    <>
+      <div className="flex flex-col items-center gap-3 py-2 md:py-4">
+        {contact.avatar_url
+          ? <img src={contact.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover" />
+          : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary text-2xl font-bold">{contact.first_name.charAt(0)}{contact.last_name.charAt(0)}</div>
+        }
+        <div className="text-center">
+          <p className="font-semibold text-lg">{contact.first_name} {contact.last_name}</p>
+          {contact.status && <StatusBadge status={STATUS_MAP[contact.status] ?? "default"} label={contact.status} />}
+        </div>
+      </div>
+      <Separator />
+      <div className="flex flex-col gap-3">
+        <InfoRow icon={<IconMail className="h-4 w-4" />}          label="Email"     value={contact.email}        href={contact.email ? `mailto:${contact.email}` : undefined} />
+        <InfoRow icon={<IconPhone className="h-4 w-4" />}         label="Phone"     value={contact.phone}        href={contact.phone ? `tel:${contact.phone}` : undefined} />
+        <InfoRow icon={<IconBriefcase className="h-4 w-4" />}     label="Job Title" value={contact.job_title} />
+        <InfoRow icon={<IconMapPin className="h-4 w-4" />}        label="City"      value={contact.city} />
+        <InfoRow icon={<IconBrandLinkedin className="h-4 w-4" />} label="LinkedIn"  value={contact.linkedin_url}   href={contact.linkedin_url ?? undefined} />
+        <InfoRow icon={<IconBrandTwitter className="h-4 w-4" />}  label="Twitter"   value={contact.twitter_handle} href={contact.twitter_handle ? `https://twitter.com/${contact.twitter_handle.replace("@","")}` : undefined} />
+        {company && (
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 shrink-0 text-muted-foreground"><IconBuilding className="h-4 w-4" /></div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs text-muted-foreground">Company</span>
+              <button onClick={() => onNavigateCompany?.(company.id)} className={cn("text-sm text-left", onNavigateCompany && "text-primary underline-offset-2 hover:underline")}>
+                {company.name}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <Separator />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-muted p-3 text-center">
+          <p className="text-2xl font-bold">{pendingCount}</p>
+          <p className="text-xs text-muted-foreground">Pending</p>
+        </div>
+        <div className="rounded-lg bg-muted p-3 text-center">
+          <p className="text-2xl font-bold">{new Date(contact.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+          <p className="text-xs text-muted-foreground">Added</p>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 pb-4">
+      <div className="p-4 md:p-6 md:pb-4">
         <PageHeader
           title={`${contact.first_name} ${contact.last_name}`}
           description={[contact.job_title, company?.name].filter(Boolean).join(" · ") || "No details"}
@@ -221,56 +267,17 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
         />
       </div>
 
-      <div className="flex flex-1 gap-0 overflow-hidden px-6 pb-6">
-        <div className="flex flex-col gap-4 w-72 shrink-0 pr-6 overflow-y-auto">
-          <div className="flex flex-col items-center gap-3 py-4">
-            {contact.avatar_url
-              ? <img src={contact.avatar_url} alt="" className="h-20 w-20 rounded-full object-cover" />
-              : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-primary text-2xl font-bold">{contact.first_name.charAt(0)}{contact.last_name.charAt(0)}</div>
-            }
-            <div className="text-center">
-              <p className="font-semibold text-lg">{contact.first_name} {contact.last_name}</p>
-              {contact.status && <StatusBadge status={STATUS_MAP[contact.status] ?? "default"} label={contact.status} />}
-            </div>
-          </div>
-          <Separator />
-          <div className="flex flex-col gap-3">
-            <InfoRow icon={<IconMail className="h-4 w-4" />}          label="Email"     value={contact.email}        href={contact.email ? `mailto:${contact.email}` : undefined} />
-            <InfoRow icon={<IconPhone className="h-4 w-4" />}         label="Phone"     value={contact.phone}        href={contact.phone ? `tel:${contact.phone}` : undefined} />
-            <InfoRow icon={<IconBriefcase className="h-4 w-4" />}     label="Job Title" value={contact.job_title} />
-            <InfoRow icon={<IconMapPin className="h-4 w-4" />}        label="City"      value={contact.city} />
-            <InfoRow icon={<IconBrandLinkedin className="h-4 w-4" />} label="LinkedIn"  value={contact.linkedin_url}   href={contact.linkedin_url ?? undefined} />
-            <InfoRow icon={<IconBrandTwitter className="h-4 w-4" />}  label="Twitter"   value={contact.twitter_handle} href={contact.twitter_handle ? `https://twitter.com/${contact.twitter_handle.replace("@","")}` : undefined} />
-            {company && (
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 shrink-0 text-muted-foreground"><IconBuilding className="h-4 w-4" /></div>
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs text-muted-foreground">Company</span>
-                  <button onClick={() => onNavigateCompany?.(company.id)} className={cn("text-sm text-left", onNavigateCompany && "text-primary underline-offset-2 hover:underline")}>
-                    {company.name}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          <Separator />
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-muted p-3 text-center">
-              <p className="text-2xl font-bold">{pendingCount}</p>
-              <p className="text-xs text-muted-foreground">Pending</p>
-            </div>
-            <div className="rounded-lg bg-muted p-3 text-center">
-              <p className="text-2xl font-bold">{new Date(contact.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
-              <p className="text-xs text-muted-foreground">Added</p>
-            </div>
-          </div>
+      <div className="flex flex-1 gap-0 overflow-hidden px-4 md:px-6 pb-6">
+        <div className="hidden md:flex flex-col gap-4 w-72 shrink-0 pr-6 overflow-y-auto">
+          {sidebarContent}
         </div>
 
-        <Separator orientation="vertical" />
+        <Separator orientation="vertical" className="hidden md:block" />
 
-        <div className="flex flex-col flex-1 overflow-hidden pl-6">
+        <div className="flex flex-col flex-1 overflow-hidden md:pl-6">
           <Tabs defaultValue="notes" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="w-fit shrink-0">
+            <TabsList className="w-fit max-w-full shrink-0 overflow-x-auto">
+              <TabsTrigger value="details" className="md:hidden"><IconUser className="h-4 w-4 mr-1.5" /> Details</TabsTrigger>
               <TabsTrigger value="notes"><IconNotes className="h-4 w-4 mr-1.5" /> Notes</TabsTrigger>
               <TabsTrigger value="activities">
                 <IconChecklist className="h-4 w-4 mr-1.5" /> Activities
@@ -279,6 +286,9 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
               <TabsTrigger value="deals"><IconCurrencyDollar className="h-4 w-4 mr-1.5" /> Deals</TabsTrigger>
               <TabsTrigger value="emails"><IconMail className="h-4 w-4 mr-1.5" /> Emails</TabsTrigger>
             </TabsList>
+            <TabsContent value="details" className="md:hidden flex-1 overflow-y-auto mt-4">
+              <div className="flex flex-col gap-4 pb-4">{sidebarContent}</div>
+            </TabsContent>
             <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="contact_id" filterId={contactId} /></TabsContent>
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="contact_id" filterId={contactId} /></TabsContent>
             <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><DealsTab contactId={contactId} onNavigateDeal={onNavigateDeal} /></TabsContent>

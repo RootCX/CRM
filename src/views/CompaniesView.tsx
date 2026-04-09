@@ -8,7 +8,7 @@ import {
 import {
   IconPlus, IconEdit, IconTrash, IconBuilding, IconNotes,
   IconWorld, IconPhone, IconMapPin, IconUsers, IconCurrencyDollar,
-  IconChecklist, IconBrandLinkedin, IconStarFilled, IconStar, IconTarget,
+  IconChecklist, IconBrandLinkedin, IconStarFilled, IconStar, IconTarget, IconInfoCircle,
 } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
@@ -127,9 +127,49 @@ function CompanyDetail({ company, onBack, onEdit, onNavigateContact, onNavigateD
   const pipelineValue = deals.filter(d => d.company_id === company.id && d.stage !== "Closed Won" && d.stage !== "Closed Lost").reduce((s, d) => s + (d.value ?? 0), 0);
   const isFav         = isFavorite("company", company.id);
 
+  const sidebarContent = (
+    <>
+      <div className="flex flex-col items-center gap-3 py-2 md:py-4">
+        {company.domain_name
+          ? <img src={`https://www.google.com/s2/favicons?sz=64&domain=${company.domain_name}`} alt="" className="h-14 w-14 rounded-xl object-contain bg-muted p-1" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary text-2xl font-bold">{company.name.charAt(0).toUpperCase()}</div>
+        }
+        <p className="font-semibold text-lg text-center">{company.name}</p>
+        {company.industry && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", INDUSTRY_COLORS[company.industry] ?? "bg-gray-100 text-gray-700")}>{company.industry}</span>}
+        {company.ideal_customer_profile && <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700"><IconTarget className="h-3 w-3" /> ICP</span>}
+      </div>
+      <Separator />
+      <div className="grid grid-cols-3 gap-2">
+        {[["People", peopleCount], ["Deals", dealsCount], ["Tasks", pendingCount]].map(([label, val]) => (
+          <div key={label as string} className="rounded-lg bg-muted p-2 text-center">
+            <p className="text-xl font-bold">{val}</p>
+            <p className="text-xs text-muted-foreground">{label}</p>
+          </div>
+        ))}
+      </div>
+      {pipelineValue > 0 && (
+        <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-center">
+          <p className="text-xs text-emerald-600 mb-0.5">Pipeline</p>
+          <p className="text-sm font-bold text-emerald-700">${pipelineValue.toLocaleString()}</p>
+        </div>
+      )}
+      <Separator />
+      <div className="flex flex-col gap-3">
+        {company.description && <div><p className="text-xs text-muted-foreground mb-1">About</p><p className="text-sm text-muted-foreground leading-relaxed">{company.description}</p></div>}
+        <InfoRow icon={<IconWorld className="h-4 w-4" />}        label="Website"   value={company.website}        href={company.website} />
+        <InfoRow icon={<IconWorld className="h-4 w-4" />}        label="Domain"    value={company.domain_name}    href={company.domain_name ? `https://${company.domain_name}` : undefined} />
+        <InfoRow icon={<IconPhone className="h-4 w-4" />}        label="Phone"     value={company.phone} />
+        <InfoRow icon={<IconMapPin className="h-4 w-4" />}       label="Address"   value={company.address} />
+        <InfoRow icon={<IconBrandLinkedin className="h-4 w-4" />}label="LinkedIn"  value={company.linkedin_url}   href={company.linkedin_url ?? undefined} />
+        {company.employees != null && <InfoRow icon={<IconUsers className="h-4 w-4" />} label="Employees" value={company.employees.toLocaleString()} />}
+        {company.annual_recurring_revenue != null && <InfoRow icon={<IconCurrencyDollar className="h-4 w-4" />} label="ARR" value={`$${company.annual_recurring_revenue.toLocaleString()}`} />}
+      </div>
+    </>
+  );
+
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 pb-4">
+      <div className="p-4 md:p-6 md:pb-4">
         <PageHeader
           title={company.name}
           description={[company.industry, company.domain_name].filter(Boolean).join(" · ") || "No industry set"}
@@ -145,60 +185,25 @@ function CompanyDetail({ company, onBack, onEdit, onNavigateContact, onNavigateD
         />
       </div>
 
-      <div className="flex flex-1 gap-0 overflow-hidden px-6 pb-6">
-        <div className="flex flex-col gap-4 w-64 shrink-0 pr-6 overflow-y-auto">
-          <div className="flex flex-col items-center gap-3 py-4">
-            {company.domain_name
-              ? <img src={`https://www.google.com/s2/favicons?sz=64&domain=${company.domain_name}`} alt="" className="h-14 w-14 rounded-xl object-contain bg-muted p-1" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-              : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary text-2xl font-bold">{company.name.charAt(0).toUpperCase()}</div>
-            }
-            <p className="font-semibold text-lg text-center">{company.name}</p>
-            {company.industry && <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", INDUSTRY_COLORS[company.industry] ?? "bg-gray-100 text-gray-700")}>{company.industry}</span>}
-            {company.ideal_customer_profile && <span className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-violet-100 text-violet-700"><IconTarget className="h-3 w-3" /> ICP</span>}
-          </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-3 gap-2">
-            {[["People", peopleCount], ["Deals", dealsCount], ["Tasks", pendingCount]].map(([label, val]) => (
-              <div key={label as string} className="rounded-lg bg-muted p-2 text-center">
-                <p className="text-xl font-bold">{val}</p>
-                <p className="text-xs text-muted-foreground">{label}</p>
-              </div>
-            ))}
-          </div>
-
-          {pipelineValue > 0 && (
-            <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-center">
-              <p className="text-xs text-emerald-600 mb-0.5">Pipeline</p>
-              <p className="text-sm font-bold text-emerald-700">${pipelineValue.toLocaleString()}</p>
-            </div>
-          )}
-
-          <Separator />
-
-          <div className="flex flex-col gap-3">
-            {company.description && <div><p className="text-xs text-muted-foreground mb-1">About</p><p className="text-sm text-muted-foreground leading-relaxed">{company.description}</p></div>}
-            <InfoRow icon={<IconWorld className="h-4 w-4" />}        label="Website"   value={company.website}        href={company.website} />
-            <InfoRow icon={<IconWorld className="h-4 w-4" />}        label="Domain"    value={company.domain_name}    href={company.domain_name ? `https://${company.domain_name}` : undefined} />
-            <InfoRow icon={<IconPhone className="h-4 w-4" />}        label="Phone"     value={company.phone} />
-            <InfoRow icon={<IconMapPin className="h-4 w-4" />}       label="Address"   value={company.address} />
-            <InfoRow icon={<IconBrandLinkedin className="h-4 w-4" />}label="LinkedIn"  value={company.linkedin_url}   href={company.linkedin_url ?? undefined} />
-            {company.employees != null && <InfoRow icon={<IconUsers className="h-4 w-4" />} label="Employees" value={company.employees.toLocaleString()} />}
-            {company.annual_recurring_revenue != null && <InfoRow icon={<IconCurrencyDollar className="h-4 w-4" />} label="ARR" value={`$${company.annual_recurring_revenue.toLocaleString()}`} />}
-          </div>
+      <div className="flex flex-1 gap-0 overflow-hidden px-4 md:px-6 pb-6">
+        <div className="hidden md:flex flex-col gap-4 w-64 shrink-0 pr-6 overflow-y-auto">
+          {sidebarContent}
         </div>
 
-        <Separator orientation="vertical" />
+        <Separator orientation="vertical" className="hidden md:block" />
 
-        <div className="flex flex-col flex-1 overflow-hidden pl-6">
+        <div className="flex flex-col flex-1 overflow-hidden md:pl-6">
           <Tabs defaultValue="people" className="flex flex-col flex-1 overflow-hidden">
-            <TabsList className="w-fit shrink-0">
+            <TabsList className="w-fit max-w-full shrink-0 overflow-x-auto">
+              <TabsTrigger value="details" className="md:hidden"><IconInfoCircle className="h-4 w-4 mr-1.5" /> Details</TabsTrigger>
               <TabsTrigger value="people"><IconUsers className="h-4 w-4 mr-1.5" /> People{peopleCount > 0 && <span className="ml-1.5 text-xs text-muted-foreground">({peopleCount})</span>}</TabsTrigger>
               <TabsTrigger value="deals"><IconCurrencyDollar className="h-4 w-4 mr-1.5" /> Deals{dealsCount > 0 && <span className="ml-1.5 text-xs text-muted-foreground">({dealsCount})</span>}</TabsTrigger>
               <TabsTrigger value="activities"><IconChecklist className="h-4 w-4 mr-1.5" /> Activities</TabsTrigger>
               <TabsTrigger value="notes"><IconNotes className="h-4 w-4 mr-1.5" /> Notes</TabsTrigger>
             </TabsList>
+            <TabsContent value="details" className="md:hidden flex-1 overflow-y-auto mt-4">
+              <div className="flex flex-col gap-4 pb-4">{sidebarContent}</div>
+            </TabsContent>
             <TabsContent value="people"     className="flex-1 overflow-hidden mt-4"><PeopleTab companyId={company.id} onNavigateContact={onNavigateContact} /></TabsContent>
             <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><CompanyDealsTab companyId={company.id} onNavigateDeal={onNavigateDeal} /></TabsContent>
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="company_id" filterId={company.id} /></TabsContent>
@@ -290,11 +295,11 @@ export default function CompaniesView({ onNavigateContact, onNavigateDeal, initi
 
   const filtered = filters.length > 0 || !!search;
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="Companies" description="Manage the companies in your pipeline"
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Company</Button>}
       />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search companies…" debounceMs={300} />
         <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
       </div>
