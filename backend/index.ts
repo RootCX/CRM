@@ -12,6 +12,7 @@ serve({
   },
   rpc: {
     sync_emails: (params: any, caller: any) => syncEmails(params, caller),
+    add_filtered_to_list: (params: any, caller: any) => addFilteredToList(params, caller),
   },
   onJob: fetchBodies,
 });
@@ -70,6 +71,66 @@ async function syncEmails({ contact_id, contact_email }: { contact_id: string; c
 
   const allRes = await api("GET", `${COL}?contact_id=${contact_id}&sort=date&order=desc&limit=100`, token);
   return { synced: inserted.length, job_id, emails: allRes?.data ?? [] };
+}
+
+// ─── add_filtered_to_list ────────────────────────────────────────────────────
+
+const ENTITY_LINK_FIELD: Record<string, string> = {
+  contacts: "contact_id", companies: "company_id", deals: "deal_id",
+};
+
+async function addFilteredToList(
+  { list_id, entity_type, where }: { list_id: string; entity_type: string; where?: any },
+  caller: any,
+) {
+  const token: string = caller?.authToken;
+  if (!token) throw new Error("Not authenticated");
+
+  const linkField = ENTITY_LINK_FIELD[entity_type];
+  if (!linkField) throw new Error(`Invalid entity_type: ${entity_type}`);
+
+  const batchSize = 500;
+  const existingIds = new Set<string>();
+  let existingOffset = 0;
+  while (true) {
+    const batch = await api("POST", `/api/v1/apps/${APP_ID}/collections/list_records/query`, token, {
+      where: { list_id: { $eq: list_id } },
+      limit: batchSize,
+      offset: existingOffset,
+    });
+    const rows: any[] = batch?.data ?? [];
+    rows.forEach((r: any) => { const v = r[linkField]; if (v) existingIds.add(v); });
+    if (rows.length < batchSize) break;
+    existingOffset += batchSize;
+  }
+
+  let offset = 0;
+  let added = 0;
+
+  while (true) {
+    const batch = await api("POST", `/api/v1/apps/${APP_ID}/collections/${entity_type}/query`, token, {
+      ...(where ? { where } : {}),
+      limit: batchSize,
+      offset,
+    });
+
+    const records: any[] = batch?.data ?? [];
+    if (records.length === 0) break;
+
+    const newRecords = records.filter((r: any) => !existingIds.has(r.id));
+    if (newRecords.length > 0) {
+      await api("POST", `/api/v1/apps/${APP_ID}/collections/list_records/bulk`, token,
+        newRecords.map((r: any) => ({ list_id, [linkField]: r.id })),
+      );
+      added += newRecords.length;
+      newRecords.forEach((r: any) => existingIds.add(r.id));
+    }
+
+    if (records.length < batchSize) break;
+    offset += batchSize;
+  }
+
+  return { added };
 }
 
 // ─── job: fetch_bodies ────────────────────────────────────────────────────────

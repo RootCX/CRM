@@ -96,6 +96,25 @@
       ]
     },
     {
+      "entityName": "lists",
+      "fields": [
+        { "name": "name",        "type": "text", "required": true },
+        { "name": "entity_type", "type": "text", "required": true, "enum_values": ["contacts", "companies", "deals"] },
+        { "name": "icon",        "type": "text" },
+        { "name": "position",    "type": "number" }
+      ]
+    },
+    {
+      "entityName": "list_records",
+      "fields": [
+        { "name": "list_id",    "type": "entity_link", "references": { "entity": "lists",     "field": "id" }, "required": true },
+        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",     "field": "id" } },
+        { "name": "position",   "type": "number" }
+      ]
+    },
+    {
       "entityName": "favorites",
       "fields": [
         { "name": "entity_type", "type": "text", "required": true, "enum_values": ["contact", "company", "deal"] },
@@ -121,6 +140,10 @@
       { "key": "activities.write",    "description": "Create and edit activities" },
       { "key": "contact_emails.read", "description": "View cached contact emails" },
       { "key": "contact_emails.write","description": "Store cached contact emails" },
+      { "key": "lists.read",           "description": "View lists" },
+      { "key": "lists.write",          "description": "Create and manage lists" },
+      { "key": "list_records.read",    "description": "View list records" },
+      { "key": "list_records.write",   "description": "Add and remove list records" },
       { "key": "favorites.read",      "description": "View favorites" },
       { "key": "favorites.write",     "description": "Manage favorites" }
     ]

@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useAppCollection } from "@rootcx/sdk";
+import { useAppCollection, useAppRecord } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState,
   Tabs, TabsList, TabsTrigger, TabsContent,
   Card, CardContent, Button, Separator, SearchInput, ScrollArea, Badge, toast,
 } from "@rootcx/ui";
 import {
-  IconPlus, IconEdit, IconTrash, IconCurrencyDollar, IconNotes,
+  IconPlus, IconEdit, IconTrash, IconCurrencyDollar, IconNotes, IconList,
   IconUsers, IconChecklist, IconStarFilled, IconStar, IconInfoCircle,
 } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -15,9 +15,11 @@ import { NotesTab } from "@/components/notes/NotesTab";
 import { ActivitiesTab } from "@/components/ActivitiesTab";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import { usePaginatedCollection } from "@/hooks/usePaginatedCollection";
 import { mergeWhere, buildSearchClause } from "@/lib/search";
 import { useFavorites } from "@/hooks/useFavorites";
 import { APP_ID, STAGE_STYLES, CURRENCY_SYMBOLS, STAGE_DEFAULT_PROBABILITY, PIPELINE_STAGES, STAGE_OPTIONS, SOURCE_OPTIONS, CURRENCY_OPTIONS } from "@/lib/constants";
+import { AddToListDialog } from "@/components/AddToListDialog";
 import type { Contact, Company, Deal, DealContact, Activity } from "@/lib/types";
 
 function DealPeopleTab({ deal, contacts, dealContacts, onCreate, onRemove, onNavigateContact }: {
@@ -184,24 +186,28 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
   );
 }
 
-interface Props { onNavigateContact?: (id: string) => void; onNavigateCompany?: (id: string) => void; initialSelectedId?: string | null; }
+interface Props { onNavigateContact?: (id: string) => void; onNavigateCompany?: (id: string) => void; initialSelectedId?: string | null; lists: import("@/lib/types").List[] }
 
-export default function DealsView({ onNavigateContact, onNavigateCompany, initialSelectedId = null }: Props) {
+export default function DealsView({ onNavigateContact, onNavigateCompany, initialSelectedId = null, lists }: Props) {
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
   const [search, setSearch]             = useState("");
   const [selectedId, setSelectedId]     = useState<string | null>(initialSelectedId);
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Deal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Deal | null>(null);
+  const [pipelineActive, setPipelineActive] = useState(false);
+  const [addToListOpen, setAddToListOpen] = useState(false);
 
   const where = mergeWhere(buildWhereClause(filters), buildSearchClause(search, ["title"]));
-  const { data: deals, loading, create, update, remove } = useAppCollection<Deal>(APP_ID, "deals", where ? { where } : undefined);
+  const { data: deals, loading, create, update, remove, rowCount, pagination, onPaginationChange } = usePaginatedCollection<Deal>(APP_ID, "deals", { where });
+  const { data: allDeals } = useAppCollection<Deal>(APP_ID, "deals", pipelineActive ? (where ? { where } : undefined) : { where: { id: { $in: [] } } });
+  const { data: selectedRecord } = useAppRecord<Deal>(APP_ID, "deals", selectedId);
   const { data: contacts }  = useAppCollection<Contact>(APP_ID, "contacts");
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
 
   const contactName = (id?: string) => { const c = contacts.find(c => c.id === id); return c ? `${c.first_name} ${c.last_name}` : undefined; };
   const companyName = (id?: string) => companies.find(c => c.id === id)?.name;
-  const selected    = deals.find(d => d.id === selectedId) ?? null;
+  const selected    = selectedRecord ?? deals.find(d => d.id === selectedId) ?? null;
 
   const filterFields: FilterFieldDef[] = [
     { key: "title",      label: "Title",    type: "text" },
@@ -277,14 +283,14 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
   );
 
   const filtered = filters.length > 0 || !!search;
-  const totalPipelineValue = deals.filter(d => PIPELINE_STAGES.includes(d.stage)).reduce((s, d) => s + (d.value ?? 0), 0);
+  const totalPipelineValue = allDeals.filter(d => PIPELINE_STAGES.includes(d.stage)).reduce((s, d) => s + (d.value ?? 0), 0);
 
   return (
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title="Deals" description="Track your sales pipeline and close deals"
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Deal</Button>}
       />
-      <Tabs defaultValue="list">
+      <Tabs defaultValue="list" onValueChange={v => setPipelineActive(v === "pipeline")}>
         <div className="flex flex-col gap-4">
           <TabsList className="w-fit">
             <TabsTrigger value="list">List</TabsTrigger>
@@ -295,8 +301,15 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <SearchInput value={search} onChange={setSearch} placeholder="Search deals…" debounceMs={300} />
               <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+              {rowCount > 0 && (
+                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
+                  <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
+                </Button>
+              )}
             </div>
-            <DataTable data={deals} columns={columns} loading={loading} pageSize={15} selectable onRowClick={row => setSelectedId(row.id)}
+            <DataTable data={deals} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
+              rowCount={rowCount} onPaginationChange={onPaginationChange}
+              onRowClick={row => setSelectedId(row.id)}
               rowActions={[
                 { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
                 { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
@@ -313,7 +326,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:grid-cols-4">
               {PIPELINE_STAGES.map(stage => {
-                const stageDeals = deals.filter(d => d.stage === stage);
+                const stageDeals = allDeals.filter(d => d.stage === stage);
                 const stageValue = stageDeals.reduce((s, d) => s + (d.value ?? 0), 0);
                 return (
                   <div key={stage} className="flex flex-col gap-2">
@@ -362,6 +375,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
         title="Delete Deal" description={`Are you sure you want to delete "${deleteTarget?.title}"? This cannot be undone.`}
         onConfirm={handleDelete} confirmLabel="Delete" destructive
       />
+      <AddToListDialog open={addToListOpen} onOpenChange={setAddToListOpen} entityType="deals" where={where} totalCount={rowCount} lists={lists} />
     </div>
   );
 }

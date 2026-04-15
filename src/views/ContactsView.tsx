@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
 import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, StatusBadge, Button, SearchInput, toast } from "@rootcx/ui";
-import { IconPlus, IconEdit, IconTrash, IconUsers } from "@tabler/icons-react";
+import { IconPlus, IconEdit, IconTrash, IconUsers, IconList } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import { usePaginatedCollection } from "@/hooks/usePaginatedCollection";
 import { mergeWhere, buildSearchClause } from "@/lib/search";
 import { APP_ID, STATUS_MAP, CONTACT_STATUSES } from "@/lib/constants";
+import { AddToListDialog } from "@/components/AddToListDialog";
 import type { Company, Contact } from "@/lib/types";
 
 const STATUS_OPTIONS = CONTACT_STATUSES.map(s => ({ label: s, value: s }));
@@ -33,15 +35,16 @@ const FORM_FIELDS = [
   { name: "twitter_handle", label: "Twitter / X",  type: "text" as const },
 ];
 
-export default function ContactsView({ onSelectContact }: { onSelectContact: (id: string) => void }) {
+export default function ContactsView({ onSelectContact, lists }: { onSelectContact: (id: string) => void; lists: import("@/lib/types").List[] }) {
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
   const [search, setSearch]             = useState("");
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Contact | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [addToListOpen, setAddToListOpen] = useState(false);
 
   const where = mergeWhere(buildWhereClause(filters), buildSearchClause(search, ["first_name","last_name","email","job_title","city"]));
-  const { data: contacts, loading, create, update, remove } = useAppCollection<Contact>(APP_ID, "contacts", where ? { where } : undefined);
+  const { data: contacts, loading, create, update, remove, rowCount, pagination, onPaginationChange } = usePaginatedCollection<Contact>(APP_ID, "contacts", { where });
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
 
   const companyOptions = companies.map(c => ({ label: c.name, value: c.id }));
@@ -98,8 +101,14 @@ export default function ContactsView({ onSelectContact }: { onSelectContact: (id
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search contacts…" debounceMs={300} />
         <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+        {rowCount > 0 && (
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
+            <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
+          </Button>
+        )}
       </div>
-      <DataTable data={contacts} columns={columns} loading={loading} pageSize={15} selectable
+      <DataTable data={contacts} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
+        rowCount={rowCount} onPaginationChange={onPaginationChange}
         onRowClick={row => onSelectContact(row.id)}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
@@ -117,6 +126,7 @@ export default function ContactsView({ onSelectContact }: { onSelectContact: (id
         onConfirm={async () => { if (!deleteTarget) return; try { await remove(deleteTarget.id); toast.success("Contact deleted"); setDeleteTarget(null); } catch { toast.error("Failed to delete contact"); } }}
         confirmLabel="Delete" destructive
       />
+      <AddToListDialog open={addToListOpen} onOpenChange={setAddToListOpen} entityType="contacts" where={where} totalCount={rowCount} lists={lists} />
     </div>
   );
 }

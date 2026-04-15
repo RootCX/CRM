@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useAppCollection } from "@rootcx/sdk";
+import { useAppCollection, useAppRecord } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState,
   Tabs, TabsList, TabsTrigger, TabsContent,
   Button, Separator, SearchInput, ScrollArea, toast,
 } from "@rootcx/ui";
 import {
-  IconPlus, IconEdit, IconTrash, IconBuilding, IconNotes,
+  IconPlus, IconEdit, IconTrash, IconBuilding, IconNotes, IconList,
   IconWorld, IconPhone, IconMapPin, IconUsers, IconCurrencyDollar,
   IconChecklist, IconBrandLinkedin, IconStarFilled, IconStar, IconTarget, IconInfoCircle,
 } from "@tabler/icons-react";
@@ -16,9 +16,11 @@ import { NotesTab } from "@/components/notes/NotesTab";
 import { ActivitiesTab } from "@/components/ActivitiesTab";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import { usePaginatedCollection } from "@/hooks/usePaginatedCollection";
 import { mergeWhere, buildSearchClause } from "@/lib/search";
 import { useFavorites } from "@/hooks/useFavorites";
 import { APP_ID, INDUSTRY_COLORS, STAGE_STYLES, CURRENCY_SYMBOLS, INDUSTRIES } from "@/lib/constants";
+import { AddToListDialog } from "@/components/AddToListDialog";
 import type { Company, Contact, Deal, Activity } from "@/lib/types";
 
 function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: string; value?: string | null; href?: string }) {
@@ -235,20 +237,22 @@ const FILTER_FIELDS: FilterFieldDef[] = [
   { key: "industry",    label: "Industry", type: "enum", options: INDUSTRIES.map(i => ({ label: i, value: i })) },
 ];
 
-interface Props { onNavigateContact?: (id: string) => void; onNavigateDeal?: (id: string) => void; initialSelectedId?: string | null; }
+interface Props { onNavigateContact?: (id: string) => void; onNavigateDeal?: (id: string) => void; initialSelectedId?: string | null; lists: import("@/lib/types").List[] }
 
-export default function CompaniesView({ onNavigateContact, onNavigateDeal, initialSelectedId = null }: Props) {
+export default function CompaniesView({ onNavigateContact, onNavigateDeal, initialSelectedId = null, lists }: Props) {
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
   const [search, setSearch]             = useState("");
   const [selectedId, setSelectedId]     = useState<string | null>(initialSelectedId);
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Company | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
+  const [addToListOpen, setAddToListOpen] = useState(false);
 
   const where = mergeWhere(buildWhereClause(filters), buildSearchClause(search, ["name","industry","website","address","domain_name"]));
-  const { data: companies, loading, create, update, remove } = useAppCollection<Company>(APP_ID, "companies", where ? { where } : undefined);
+  const { data: companies, loading, create, update, remove, rowCount, pagination, onPaginationChange } = usePaginatedCollection<Company>(APP_ID, "companies", { where });
+  const { data: selectedRecord } = useAppRecord<Company>(APP_ID, "companies", selectedId);
 
-  const selected = companies.find(c => c.id === selectedId) ?? null;
+  const selected = selectedRecord ?? companies.find(c => c.id === selectedId) ?? null;
   const openEdit = (c: Company) => { setEditTarget(c); setFormOpen(true); };
 
   const columns: ColumnDef<Company, unknown>[] = [
@@ -302,8 +306,15 @@ export default function CompaniesView({ onNavigateContact, onNavigateDeal, initi
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search companies…" debounceMs={300} />
         <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
+        {rowCount > 0 && (
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
+            <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
+          </Button>
+        )}
       </div>
-      <DataTable data={companies} columns={columns} loading={loading} pageSize={15} selectable onRowClick={row => setSelectedId(row.id)}
+      <DataTable data={companies} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
+        rowCount={rowCount} onPaginationChange={onPaginationChange}
+        onRowClick={row => setSelectedId(row.id)}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => openEdit(row) },
           { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
@@ -319,6 +330,7 @@ export default function CompaniesView({ onNavigateContact, onNavigateDeal, initi
         title="Delete Company" description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
         onConfirm={handleDelete} confirmLabel="Delete" destructive
       />
+      <AddToListDialog open={addToListOpen} onOpenChange={setAddToListOpen} entityType="companies" where={where} totalCount={rowCount} lists={lists} />
     </div>
   );
 }

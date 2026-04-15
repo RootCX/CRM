@@ -6,6 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import { usePaginatedCollection } from "@/hooks/usePaginatedCollection";
 import { mergeWhere, buildSearchClause } from "@/lib/search";
 import { APP_ID, TYPE_STYLES } from "@/lib/constants";
 import type { Contact, Company, Deal, Activity } from "@/lib/types";
@@ -28,7 +29,7 @@ export default function ActivitiesView() {
   const doneClause = filterDone === "pending" ? { done: { $eq: false } } : filterDone === "done" ? { done: { $eq: true } } : undefined;
   const where = mergeWhere(mergeWhere(buildWhereClause(filters), doneClause), buildSearchClause(search, ["subject", "body"]));
 
-  const { data: activities, loading, create, update, remove } = useAppCollection<Activity>(APP_ID, "activities", where ? { where } : undefined);
+  const { data: activities, loading, create, update, remove, rowCount, pagination, onPaginationChange } = usePaginatedCollection<Activity>(APP_ID, "activities", { where });
   const { data: contacts }  = useAppCollection<Contact>(APP_ID, "contacts");
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
   const { data: deals }     = useAppCollection<Deal>(APP_ID, "deals");
@@ -85,7 +86,7 @@ export default function ActivitiesView() {
     <div className="p-6 space-y-4">
       <PageHeader
         title="Activities"
-        description={filterDone === "pending" ? `${activities.length} pending` : "Log and track your sales activities"}
+        description={filterDone === "pending" ? `${rowCount} pending` : "Log and track your sales activities"}
         actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Log Activity</Button>}
       />
       <div className="flex items-center gap-3 flex-wrap">
@@ -100,7 +101,8 @@ export default function ActivitiesView() {
         </div>
         <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
       </div>
-      <DataTable data={activities} columns={columns} loading={loading} pageSize={15} selectable
+      <DataTable data={activities} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
+        rowCount={rowCount} onPaginationChange={onPaginationChange}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
           { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },

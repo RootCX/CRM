@@ -6,11 +6,12 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent,
   Toaster, DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, Separator, useTheme,
+  FormDialog, ConfirmDialog, toast,
 } from "@rootcx/ui";
 import {
   IconLogout, IconUsers, IconBuilding, IconCurrencyDollar, IconChecklist,
   IconSettings, IconChevronUp, IconNotes, IconUser, IconBuildingSkyscraper,
-  IconDatabase, IconSun, IconMoon,
+  IconDatabase, IconSun, IconMoon, IconPlus, IconList,
 } from "@tabler/icons-react";
 import ContactsView   from "./views/ContactsView";
 import ContactDetail  from "./views/ContactDetail";
@@ -18,17 +19,18 @@ import CompaniesView  from "./views/CompaniesView";
 import DealsView      from "./views/DealsView";
 import ActivitiesView from "./views/ActivitiesView";
 import NotesView      from "./views/NotesView";
+import ListView       from "./views/ListView";
 import SeedView       from "./views/SeedView";
-import type { Favorite } from "./lib/types";
-import { APP_ID } from "./lib/constants";
+import type { Favorite, List } from "./lib/types";
+import { APP_ID, LIST_ENTITY_TYPES } from "./lib/constants";
 
 type View =
   | "contacts" | "contact_detail"
   | "companies" | "company_detail"
   | "deals" | "deal_detail"
-  | "activities" | "notes" | "settings";
+  | "activities" | "notes" | "settings"
+  | "list_detail";
 
-// Encodes both view + selected id to avoid three separate state vars
 type NavState = { view: View; id?: string };
 
 const FAV_ICON: Record<Favorite["entity_type"], React.ReactNode> = {
@@ -37,47 +39,123 @@ const FAV_ICON: Record<Favorite["entity_type"], React.ReactNode> = {
   deal:    <IconCurrencyDollar className="h-4 w-4" />,
 };
 
+const LIST_ENTITY_ICON: Record<string, React.ReactNode> = {
+  contacts:  <IconUsers className="h-4 w-4" />,
+  companies: <IconBuilding className="h-4 w-4" />,
+  deals:     <IconCurrencyDollar className="h-4 w-4" />,
+};
+
 export default function App() {
   const [nav, setNav] = useState<NavState>({ view: "contacts" });
+  const [createListOpen, setCreateListOpen] = useState(false);
+  const [deleteListTarget, setDeleteListTarget] = useState<List | null>(null);
+
+  const { data: lists, create: createList, remove: removeList } = useAppCollection<List>(APP_ID, "lists", { orderBy: "position", order: "asc" });
 
   const go = (view: View, id?: string) => setNav({ view, id });
+
+  const handleCreateList = async (values: Record<string, unknown>) => {
+    try {
+      const created = await createList({ ...values, position: lists.length });
+      toast.success("List created");
+      setCreateListOpen(false);
+      if (created?.id) go("list_detail", created.id);
+    } catch { toast.error("Failed to create list"); }
+  };
+
+  const handleDuplicateList = async (list: List) => {
+    try {
+      const created = await createList({ name: `${list.name} (copy)`, entity_type: list.entity_type, position: lists.length });
+      toast.success("List duplicated");
+      if (created?.id) go("list_detail", created.id);
+    } catch { toast.error("Failed to duplicate list"); }
+  };
+
+  const handleDeleteList = async () => {
+    if (!deleteListTarget) return;
+    try {
+      await removeList(deleteListTarget.id);
+      toast.success("List deleted");
+      if (nav.view === "list_detail" && nav.id === deleteListTarget.id) go("contacts");
+      setDeleteListTarget(null);
+    } catch { toast.error("Failed to delete list"); }
+  };
 
   return (
     <AuthGate appTitle="CRM">
       {({ user, logout }) => (
         <AppShell>
           <AppShellSidebar>
-            <AppSidebar user={user} logout={logout} nav={nav} go={go} />
+            <AppSidebar user={user} logout={logout} nav={nav} go={go} lists={lists} onCreateList={() => setCreateListOpen(true)} />
           </AppShellSidebar>
           <AppShellMain>
-            <MainContent nav={nav} go={go} />
+            <MainContent
+              nav={nav} go={go} lists={lists}
+              onDuplicateList={handleDuplicateList}
+              onDeleteList={l => setDeleteListTarget(l)}
+            />
           </AppShellMain>
           <Toaster />
+
+          <FormDialog
+            open={createListOpen}
+            onOpenChange={setCreateListOpen}
+            title="New List"
+            description="Create a new list to organize and track records"
+            fields={[
+              { name: "name", label: "List name", type: "text" as const, required: true },
+              { name: "entity_type", label: "Record type", type: "select" as const, required: true, options: LIST_ENTITY_TYPES.map(t => ({ label: t.label, value: t.value })) },
+            ]}
+            defaultValues={{}}
+            onSubmit={handleCreateList}
+            submitLabel="Create List"
+          />
+
+          <ConfirmDialog
+            open={!!deleteListTarget}
+            onOpenChange={o => !o && setDeleteListTarget(null)}
+            title="Delete List"
+            description={`Are you sure you want to delete "${deleteListTarget?.name}"? The records in the list won't be deleted.`}
+            onConfirm={handleDeleteList}
+            confirmLabel="Delete"
+            destructive
+          />
         </AppShell>
       )}
     </AuthGate>
   );
 }
 
-function MainContent({ nav, go }: { nav: NavState; go: (v: View, id?: string) => void }) {
+function MainContent({ nav, go, lists, onDuplicateList, onDeleteList }: {
+  nav: NavState; go: (v: View, id?: string) => void;
+  lists: List[]; onDuplicateList: (l: List) => void; onDeleteList: (l: List) => void;
+}) {
   const { view, id } = nav;
-  if (view === "contacts")       return <ContactsView onSelectContact={id => go("contact_detail", id)} />;
+  if (view === "contacts")       return <ContactsView onSelectContact={id => go("contact_detail", id)} lists={lists} />;
   if (view === "contact_detail") return <ContactDetail contactId={id!} onBack={() => go("contacts")} onNavigateCompany={id => go("company_detail", id)} onNavigateDeal={id => go("deal_detail", id)} />;
-  if (view === "companies" || view === "company_detail") return <CompaniesView key={id ?? "list"} initialSelectedId={view === "company_detail" ? id : null} onNavigateContact={id => go("contact_detail", id)} onNavigateDeal={id => go("deal_detail", id)} />;
-  if (view === "deals"    || view === "deal_detail")    return <DealsView    key={id ?? "list"} initialSelectedId={view === "deal_detail" ? id : null} onNavigateContact={id => go("contact_detail", id)} onNavigateCompany={id => go("company_detail", id)} />;
+  if (view === "companies" || view === "company_detail") return <CompaniesView key={id ?? "list"} initialSelectedId={view === "company_detail" ? id : null} onNavigateContact={id => go("contact_detail", id)} onNavigateDeal={id => go("deal_detail", id)} lists={lists} />;
+  if (view === "deals"    || view === "deal_detail")    return <DealsView    key={id ?? "list"} initialSelectedId={view === "deal_detail" ? id : null} onNavigateContact={id => go("contact_detail", id)} onNavigateCompany={id => go("company_detail", id)} lists={lists} />;
   if (view === "activities") return <ActivitiesView />;
   if (view === "notes")      return <NotesView />;
+  if (view === "list_detail") {
+    const list = lists.find(l => l.id === id);
+    if (!list) return null;
+    return <ListView key={id} list={list} onBack={() => go("contacts")} onDuplicate={onDuplicateList} onDelete={onDeleteList}
+      onNavigateContact={id => go("contact_detail", id)} onNavigateCompany={id => go("company_detail", id)} onNavigateDeal={id => go("deal_detail", id)} />;
+  }
   if (view === "settings")   return <SettingsView />;
   return null;
 }
 
-function AppSidebar({ user, logout, nav, go }: { user: any; logout: () => void; nav: NavState; go: (v: View, id?: string) => void }) {
+function AppSidebar({ user, logout, nav, go, lists, onCreateList }: {
+  user: any; logout: () => void; nav: NavState; go: (v: View, id?: string) => void;
+  lists: List[]; onCreateList: () => void;
+}) {
   const { data: favorites } = useAppCollection<Favorite>(APP_ID, "favorites", { orderBy: "position", order: "asc" });
   const { theme, setTheme } = useTheme();
 
-  // A view is "active" if it matches, including its detail sub-view
-  const active = (v: View) =>
-    nav.view === v ||
+  const active = (v: View, id?: string) =>
+    (nav.view === v && (!id || nav.id === id)) ||
     (v === "contacts"  && nav.view === "contact_detail")  ||
     (v === "companies" && nav.view === "company_detail")   ||
     (v === "deals"     && nav.view === "deal_detail");
@@ -117,6 +195,30 @@ function AppSidebar({ user, logout, nav, go }: { user: any; logout: () => void; 
         <SidebarItem icon={<IconChecklist className="h-4 w-4" />}      label="Activities" active={active("activities")} onClick={() => go("activities")} />
         <SidebarItem icon={<IconNotes className="h-4 w-4" />}          label="Notes"      active={active("notes")}      onClick={() => go("notes")} />
       </SidebarSection>
+
+      <div className="py-1">
+        <div className="flex w-full items-center px-2 py-1.5">
+          <span className="flex-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lists</span>
+          <button onClick={onCreateList} className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
+            <IconPlus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        <div className="space-y-0.5">
+          {lists.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-muted-foreground">No lists yet</p>
+          ) : (
+            lists.map(list => (
+              <SidebarItem
+                key={list.id}
+                icon={LIST_ENTITY_ICON[list.entity_type] ?? <IconList className="h-4 w-4" />}
+                label={list.name}
+                active={active("list_detail", list.id)}
+                onClick={() => go("list_detail", list.id)}
+              />
+            ))
+          )}
+        </div>
+      </div>
 
       {favorites.length > 0 && (
         <SidebarSection title="Favorites" collapsible defaultOpen>

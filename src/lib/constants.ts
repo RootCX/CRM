@@ -47,3 +47,13 @@ export const STAGE_OPTIONS    = ["Lead","Qualified","Proposal","Negotiation","Cl
 export const SOURCE_OPTIONS   = ["Inbound","Outbound","Referral","Partner","Event","Other"].map(s => ({ label: s, value: s }));
 export const CURRENCY_OPTIONS = ["USD","EUR","GBP","CHF","CAD","AUD","JPY"].map(c => ({ label: c, value: c }));
 export const INDUSTRIES       = Object.keys(INDUSTRY_COLORS);
+
+export const LIST_ENTITY_TYPES = [
+  { label: "Contacts",  value: "contacts" },
+  { label: "Companies", value: "companies" },
+  { label: "Deals",     value: "deals" },
+] as const;
+
+export const ENTITY_LINK_FIELD: Record<string, string> = {
+  contacts: "contact_id", companies: "company_id", deals: "deal_id",
+};

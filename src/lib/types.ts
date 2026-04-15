@@ -94,6 +94,26 @@ export interface StoredEmail {
   created_at: string;
 }
 
+export interface List {
+  id: string;
+  name: string;
+  entity_type: "contacts" | "companies" | "deals";
+  icon?: string;
+  position?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListRecord {
+  id: string;
+  list_id: string;
+  contact_id?: string;
+  company_id?: string;
+  deal_id?: string;
+  position?: number;
+  created_at: string;
+}
+
 export interface Favorite {
   id: string;
   entity_type: "contact" | "company" | "deal";
