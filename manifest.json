@@ -32,7 +32,7 @@
         { "name": "avatar_url",    "type": "text" },
         { "name": "linkedin_url",  "type": "text" },
         { "name": "twitter_handle","type": "text" },
-        { "name": "company_id",    "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "company_id",    "type": "entity_link", "onDelete": "set_null", "references": { "entity": "companies", "field": "id" } },
         { "name": "status",        "type": "text",   "enum_values": ["Lead", "Prospect", "Customer", "Churned"] }
       ]
     },
@@ -45,8 +45,8 @@
         { "name": "probability", "type": "number" },
         { "name": "stage",       "type": "text",   "required": true, "enum_values": ["Lead", "Qualified", "Proposal", "Negotiation", "Closed Won", "Closed Lost"] },
         { "name": "source",      "type": "text",   "enum_values": ["Inbound", "Outbound", "Referral", "Partner", "Event", "Other"] },
-        { "name": "contact_id",  "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
-        { "name": "company_id",  "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
+        { "name": "contact_id",  "type": "entity_link", "onDelete": "set_null", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id",  "type": "entity_link", "onDelete": "set_null", "references": { "entity": "companies", "field": "id" } },
         { "name": "close_date",  "type": "date" },
         { "name": "position",    "type": "number" }
       ]
@@ -54,8 +54,8 @@
     {
       "entityName": "deal_contacts",
       "fields": [
-        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",    "field": "id" }, "required": true },
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" }, "required": true }
+        { "name": "deal_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "deals",    "field": "id" }, "required": true },
+        { "name": "contact_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts", "field": "id" }, "required": true }
       ]
     },
     {
@@ -63,16 +63,16 @@
       "fields": [
         { "name": "title",      "type": "text" },
         { "name": "body",       "type": "text" },
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
-        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
-        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",     "field": "id" } },
+        { "name": "contact_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "companies", "field": "id" } },
+        { "name": "deal_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "deals",     "field": "id" } },
         { "name": "pinned",     "type": "boolean" }
       ]
     },
     {
       "entityName": "contact_emails",
       "fields": [
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts", "field": "id" }, "required": true },
+        { "name": "contact_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts", "field": "id" }, "required": true },
         { "name": "gmail_id",   "type": "text", "required": true },
         { "name": "subject",    "type": "text" },
         { "name": "from",       "type": "text" },
@@ -88,9 +88,9 @@
         { "name": "type",       "type": "text", "required": true, "enum_values": ["Call", "Email", "Meeting", "Task"] },
         { "name": "subject",    "type": "text", "required": true },
         { "name": "body",       "type": "text" },
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
-        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
-        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",     "field": "id" } },
+        { "name": "contact_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "companies", "field": "id" } },
+        { "name": "deal_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "deals",     "field": "id" } },
         { "name": "due_date",   "type": "date" },
         { "name": "done",       "type": "boolean" }
       ]
@@ -107,10 +107,10 @@
     {
       "entityName": "list_records",
       "fields": [
-        { "name": "list_id",    "type": "entity_link", "references": { "entity": "lists",     "field": "id" }, "required": true },
-        { "name": "contact_id", "type": "entity_link", "references": { "entity": "contacts",  "field": "id" } },
-        { "name": "company_id", "type": "entity_link", "references": { "entity": "companies", "field": "id" } },
-        { "name": "deal_id",    "type": "entity_link", "references": { "entity": "deals",     "field": "id" } },
+        { "name": "list_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "lists",     "field": "id" }, "required": true },
+        { "name": "contact_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "companies", "field": "id" } },
+        { "name": "deal_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "deals",     "field": "id" } },
         { "name": "position",   "type": "number" }
       ]
     },

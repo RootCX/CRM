@@ -56,3 +56,6 @@ Thumbs.db
 
 # Misc
 .bundle/
+
+# RootCX local config (contains auth tokens)
+.rootcx/
