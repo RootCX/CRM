@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAppRecord, useAppCollection, useIntegration, useRuntimeClient } from "@rootcx/sdk";
 import {
   PageHeader, Tabs, TabsList, TabsTrigger, TabsContent,
@@ -135,7 +136,8 @@ function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail
   );
 }
 
-function DealsTab({ contactId, onNavigateDeal }: { contactId: string; onNavigateDeal?: (id: string) => void }) {
+function DealsTab({ contactId }: { contactId: string }) {
+  const navigate = useNavigate();
   const { data: deals }     = useAppCollection<Deal>(APP_ID, "deals");
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
   const contactDeals = deals.filter(d => d.contact_id === contactId);
@@ -151,8 +153,8 @@ function DealsTab({ contactId, onNavigateDeal }: { contactId: string; onNavigate
           const sym = CURRENCY_SYMBOLS[deal.currency ?? "USD"] ?? "$";
           const company = companies.find(c => c.id === deal.company_id);
           return (
-            <div key={deal.id} onClick={() => onNavigateDeal?.(deal.id)}
-              className={cn("flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors", onNavigateDeal && "cursor-pointer hover:bg-muted/40")}
+            <div key={deal.id} onClick={() => navigate(`/deals/${deal.id}`)}
+              className="flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors cursor-pointer hover:bg-muted/40"
             >
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-medium truncate">{deal.title}</span>
@@ -171,10 +173,10 @@ function DealsTab({ contactId, onNavigateDeal }: { contactId: string; onNavigate
   );
 }
 
-interface Props { contactId: string; onBack: () => void; onNavigateCompany?: (id: string) => void; onNavigateDeal?: (id: string) => void; }
-
-export default function ContactDetail({ contactId, onBack, onNavigateCompany, onNavigateDeal }: Props) {
-  const { data: contact, loading, error, update, remove } = useAppRecord<Contact>(APP_ID, "contacts", contactId);
+export default function ContactDetail() {
+  const { id: contactId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { data: contact, loading, error, update, remove } = useAppRecord<Contact>(APP_ID, "contacts", contactId!);
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
   const { data: activities } = useAppCollection<typeof APP_ID, any>(APP_ID, "activities");
   const { isFavorite, toggle: toggleFav } = useFavorites();
@@ -182,11 +184,11 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   if (loading) return <LoadingState variant="skeleton" />;
-  if (error || !contact) return <ErrorState message="Contact not found" onRetry={onBack} />;
+  if (error || !contact) return <ErrorState message="Contact not found" onRetry={() => navigate("/contacts")} />;
 
   const company      = companies.find(c => c.id === contact.company_id);
   const pendingCount = activities.filter(a => a.contact_id === contactId && !a.done).length;
-  const isFav        = isFavorite("contact", contactId);
+  const isFav        = isFavorite("contact", contactId!);
 
   const formFields = [
     { name: "first_name",     label: "First Name",   type: "text"   as const, required: true },
@@ -227,7 +229,7 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
             <div className="mt-0.5 shrink-0 text-muted-foreground"><IconBuilding className="h-4 w-4" /></div>
             <div className="flex flex-col min-w-0">
               <span className="text-xs text-muted-foreground">Company</span>
-              <button onClick={() => onNavigateCompany?.(company.id)} className={cn("text-sm text-left", onNavigateCompany && "text-primary underline-offset-2 hover:underline")}>
+              <button onClick={() => navigate(`/companies/${company.id}`)} className="text-sm text-left text-primary underline-offset-2 hover:underline">
                 {company.name}
               </button>
             </div>
@@ -254,10 +256,10 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
         <PageHeader
           title={`${contact.first_name} ${contact.last_name}`}
           description={[contact.job_title, company?.name].filter(Boolean).join(" · ") || "No details"}
-          onBack={onBack}
+          onBack={() => navigate("/contacts")}
           actions={
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={() => toggleFav("contact", contactId, `${contact.first_name} ${contact.last_name}`)}>
+              <Button variant="ghost" size="icon" onClick={() => toggleFav("contact", contactId!, `${contact.first_name} ${contact.last_name}`)}>
                 {isFav ? <IconStarFilled className="h-4 w-4 text-yellow-400" /> : <IconStar className="h-4 w-4" />}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}><IconEdit className="h-4 w-4 mr-1.5" /> Edit</Button>
@@ -289,10 +291,10 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
             <TabsContent value="details" className="md:hidden flex-1 overflow-y-auto mt-4">
               <div className="flex flex-col gap-4 pb-4">{sidebarContent}</div>
             </TabsContent>
-            <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="contact_id" filterId={contactId} /></TabsContent>
-            <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="contact_id" filterId={contactId} /></TabsContent>
-            <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><DealsTab contactId={contactId} onNavigateDeal={onNavigateDeal} /></TabsContent>
-            <TabsContent value="emails"     className="flex-1 overflow-hidden mt-4"><GmailTab contactId={contactId} contactEmail={contact.email} /></TabsContent>
+            <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="contact_id" filterId={contactId!} /></TabsContent>
+            <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="contact_id" filterId={contactId!} /></TabsContent>
+            <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><DealsTab contactId={contactId!} /></TabsContent>
+            <TabsContent value="emails"     className="flex-1 overflow-hidden mt-4"><GmailTab contactId={contactId!} contactEmail={contact.email} /></TabsContent>
           </Tabs>
         </div>
       </div>
@@ -302,7 +304,7 @@ export default function ContactDetail({ contactId, onBack, onNavigateCompany, on
       />
       <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} title="Delete Contact"
         description={`Are you sure you want to delete ${contact.first_name} ${contact.last_name}? This cannot be undone.`}
-        onConfirm={async () => { try { await remove(); toast.success("Contact deleted"); onBack(); } catch { toast.error("Failed to delete contact"); } }}
+        onConfirm={async () => { try { await remove(); toast.success("Contact deleted"); navigate("/contacts"); } catch { toast.error("Failed to delete contact"); } }}
         confirmLabel="Delete" destructive
       />
     </div>

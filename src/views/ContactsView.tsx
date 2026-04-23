@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppCollection } from "@rootcx/sdk";
 import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, StatusBadge, Button, SearchInput, toast } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconUsers, IconList } from "@tabler/icons-react";
@@ -35,7 +36,8 @@ const FORM_FIELDS = [
   { name: "twitter_handle", label: "Twitter / X",  type: "text" as const },
 ];
 
-export default function ContactsView({ onSelectContact, lists }: { onSelectContact: (id: string) => void; lists: import("@/lib/types").List[] }) {
+export default function ContactsView({ lists }: { lists: import("@/lib/types").List[] }) {
+  const navigate = useNavigate();
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
   const [search, setSearch]             = useState("");
   const [formOpen, setFormOpen]         = useState(false);
@@ -109,7 +111,7 @@ export default function ContactsView({ onSelectContact, lists }: { onSelectConta
       </div>
       <DataTable data={contacts} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
         rowCount={rowCount} onPaginationChange={onPaginationChange}
-        onRowClick={row => onSelectContact(row.id)}
+        onRowClick={row => navigate(`/contacts/${row.id}`)}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
           { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },

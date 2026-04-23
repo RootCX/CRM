@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppCollection } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, StatusBadge,
@@ -236,15 +237,12 @@ function RenamePopover({ name, onRename, children }: { name: string; onRename: (
 
 interface Props {
   list: List;
-  onBack: () => void;
   onDuplicate: (list: List) => void;
   onDelete: (list: List) => void;
-  onNavigateContact?: (id: string) => void;
-  onNavigateCompany?: (id: string) => void;
-  onNavigateDeal?: (id: string) => void;
 }
 
-export default function ListView({ list, onBack, onDuplicate, onDelete, onNavigateContact, onNavigateCompany, onNavigateDeal }: Props) {
+export default function ListView({ list, onDuplicate, onDelete }: Props) {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
   const [search, setSearch]   = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -305,9 +303,9 @@ export default function ListView({ list, onBack, onDuplicate, onDelete, onNaviga
   };
 
   const handleRowClick = (row: Contact | Company | Deal) => {
-    if (list.entity_type === "contacts")  onNavigateContact?.(row.id);
-    if (list.entity_type === "companies") onNavigateCompany?.(row.id);
-    if (list.entity_type === "deals")     onNavigateDeal?.(row.id);
+    if (list.entity_type === "contacts")  navigate(`/contacts/${row.id}`);
+    if (list.entity_type === "companies") navigate(`/companies/${row.id}`);
+    if (list.entity_type === "deals")     navigate(`/deals/${row.id}`);
   };
 
   const rowActions = [
@@ -368,7 +366,7 @@ export default function ListView({ list, onBack, onDuplicate, onDelete, onNaviga
     <div className="p-4 md:p-6 space-y-4">
       <PageHeader title={list.name}
         description={`${isEmpty ? 0 : activeResult.rowCount} ${ENTITY_LABEL[list.entity_type]?.toLowerCase() ?? "records"}`}
-        onBack={onBack}
+        onBack={() => navigate("/contacts")}
         actions={
           <div className="flex items-center gap-2">
             <Button onClick={() => setAddOpen(true)}>

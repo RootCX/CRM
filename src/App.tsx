@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Routes, Route, Navigate, NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AuthGate, useAppCollection } from "@rootcx/sdk";
 import {
   AppShell, AppShellSidebar, AppShellMain,
@@ -24,15 +25,6 @@ import SeedView       from "./views/SeedView";
 import type { Favorite, List } from "./lib/types";
 import { APP_ID, LIST_ENTITY_TYPES } from "./lib/constants";
 
-type View =
-  | "contacts" | "contact_detail"
-  | "companies" | "company_detail"
-  | "deals" | "deal_detail"
-  | "activities" | "notes" | "settings"
-  | "list_detail";
-
-type NavState = { view: View; id?: string };
-
 const FAV_ICON: Record<Favorite["entity_type"], React.ReactNode> = {
   contact: <IconUser className="h-4 w-4" />,
   company: <IconBuildingSkyscraper className="h-4 w-4" />,
@@ -46,20 +38,18 @@ const LIST_ENTITY_ICON: Record<string, React.ReactNode> = {
 };
 
 export default function App() {
-  const [nav, setNav] = useState<NavState>({ view: "contacts" });
   const [createListOpen, setCreateListOpen] = useState(false);
   const [deleteListTarget, setDeleteListTarget] = useState<List | null>(null);
+  const navigate = useNavigate();
 
   const { data: lists, create: createList, remove: removeList } = useAppCollection<List>(APP_ID, "lists", { orderBy: "position", order: "asc" });
-
-  const go = (view: View, id?: string) => setNav({ view, id });
 
   const handleCreateList = async (values: Record<string, unknown>) => {
     try {
       const created = await createList({ ...values, position: lists.length });
       toast.success("List created");
       setCreateListOpen(false);
-      if (created?.id) go("list_detail", created.id);
+      if (created?.id) navigate(`/lists/${created.id}`);
     } catch { toast.error("Failed to create list"); }
   };
 
@@ -67,7 +57,7 @@ export default function App() {
     try {
       const created = await createList({ name: `${list.name} (copy)`, entity_type: list.entity_type, position: lists.length });
       toast.success("List duplicated");
-      if (created?.id) go("list_detail", created.id);
+      if (created?.id) navigate(`/lists/${created.id}`);
     } catch { toast.error("Failed to duplicate list"); }
   };
 
@@ -76,7 +66,7 @@ export default function App() {
     try {
       await removeList(deleteListTarget.id);
       toast.success("List deleted");
-      if (nav.view === "list_detail" && nav.id === deleteListTarget.id) go("contacts");
+      navigate("/contacts");
       setDeleteListTarget(null);
     } catch { toast.error("Failed to delete list"); }
   };
@@ -86,14 +76,21 @@ export default function App() {
       {({ user, logout }) => (
         <AppShell>
           <AppShellSidebar>
-            <AppSidebar user={user} logout={logout} nav={nav} go={go} lists={lists} onCreateList={() => setCreateListOpen(true)} />
+            <AppSidebar user={user} logout={logout} lists={lists} onCreateList={() => setCreateListOpen(true)} />
           </AppShellSidebar>
           <AppShellMain>
-            <MainContent
-              nav={nav} go={go} lists={lists}
-              onDuplicateList={handleDuplicateList}
-              onDeleteList={l => setDeleteListTarget(l)}
-            />
+            <Routes>
+              <Route path="/"                 element={<Navigate to="/contacts" replace />} />
+              <Route path="/contacts"         element={<ContactsView lists={lists} />} />
+              <Route path="/contacts/:id"     element={<ContactDetail />} />
+              <Route path="/companies/:id?"   element={<CompaniesView lists={lists} />} />
+              <Route path="/deals/:id?"       element={<DealsView lists={lists} />} />
+              <Route path="/activities"       element={<ActivitiesView />} />
+              <Route path="/notes"            element={<NotesView />} />
+              <Route path="/lists/:id"        element={<ListViewRoute lists={lists} onDuplicate={handleDuplicateList} onDelete={l => setDeleteListTarget(l)} />} />
+              <Route path="/settings"         element={<SettingsView />} />
+              <Route path="*"                 element={<Navigate to="/contacts" replace />} />
+            </Routes>
           </AppShellMain>
           <Toaster />
 
@@ -126,39 +123,21 @@ export default function App() {
   );
 }
 
-function MainContent({ nav, go, lists, onDuplicateList, onDeleteList }: {
-  nav: NavState; go: (v: View, id?: string) => void;
-  lists: List[]; onDuplicateList: (l: List) => void; onDeleteList: (l: List) => void;
-}) {
-  const { view, id } = nav;
-  if (view === "contacts")       return <ContactsView onSelectContact={id => go("contact_detail", id)} lists={lists} />;
-  if (view === "contact_detail") return <ContactDetail contactId={id!} onBack={() => go("contacts")} onNavigateCompany={id => go("company_detail", id)} onNavigateDeal={id => go("deal_detail", id)} />;
-  if (view === "companies" || view === "company_detail") return <CompaniesView key={id ?? "list"} initialSelectedId={view === "company_detail" ? id : null} onNavigateContact={id => go("contact_detail", id)} onNavigateDeal={id => go("deal_detail", id)} lists={lists} />;
-  if (view === "deals"    || view === "deal_detail")    return <DealsView    key={id ?? "list"} initialSelectedId={view === "deal_detail" ? id : null} onNavigateContact={id => go("contact_detail", id)} onNavigateCompany={id => go("company_detail", id)} lists={lists} />;
-  if (view === "activities") return <ActivitiesView />;
-  if (view === "notes")      return <NotesView />;
-  if (view === "list_detail") {
-    const list = lists.find(l => l.id === id);
-    if (!list) return null;
-    return <ListView key={id} list={list} onBack={() => go("contacts")} onDuplicate={onDuplicateList} onDelete={onDeleteList}
-      onNavigateContact={id => go("contact_detail", id)} onNavigateCompany={id => go("company_detail", id)} onNavigateDeal={id => go("deal_detail", id)} />;
-  }
-  if (view === "settings")   return <SettingsView />;
-  return null;
+function ListViewRoute({ lists, onDuplicate, onDelete }: { lists: List[]; onDuplicate: (l: List) => void; onDelete: (l: List) => void }) {
+  const { id } = useParams<{ id: string }>();
+  const list = lists.find(l => l.id === id);
+  if (!list) return null;
+  return <ListView list={list} onDuplicate={onDuplicate} onDelete={onDelete} />;
 }
 
-function AppSidebar({ user, logout, nav, go, lists, onCreateList }: {
-  user: any; logout: () => void; nav: NavState; go: (v: View, id?: string) => void;
+function AppSidebar({ user, logout, lists, onCreateList }: {
+  user: any; logout: () => void;
   lists: List[]; onCreateList: () => void;
 }) {
   const { data: favorites } = useAppCollection<Favorite>(APP_ID, "favorites", { orderBy: "position", order: "asc" });
   const { theme, setTheme } = useTheme();
-
-  const active = (v: View, id?: string) =>
-    (nav.view === v && (!id || nav.id === id)) ||
-    (v === "contacts"  && nav.view === "contact_detail")  ||
-    (v === "companies" && nav.view === "company_detail")   ||
-    (v === "deals"     && nav.view === "deal_detail");
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   return (
     <Sidebar
@@ -177,7 +156,7 @@ function AppSidebar({ user, logout, nav, go, lists, onCreateList }: {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-56">
-            <DropdownMenuItem onClick={() => go("settings")}><IconSettings className="h-4 w-4 mr-2" /> Settings</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/settings")}><IconSettings className="h-4 w-4 mr-2" /> Settings</DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
               {theme === "dark" ? <IconSun className="h-4 w-4 mr-2" /> : <IconMoon className="h-4 w-4 mr-2" />}
               {theme === "dark" ? "Light mode" : "Dark mode"}
@@ -189,11 +168,21 @@ function AppSidebar({ user, logout, nav, go, lists, onCreateList }: {
       }
     >
       <SidebarSection title="Sales">
-        <SidebarItem icon={<IconUsers className="h-4 w-4" />}          label="Contacts"   active={active("contacts")}   onClick={() => go("contacts")} />
-        <SidebarItem icon={<IconBuilding className="h-4 w-4" />}       label="Companies"  active={active("companies")}  onClick={() => go("companies")} />
-        <SidebarItem icon={<IconCurrencyDollar className="h-4 w-4" />} label="Deals"      active={active("deals")}      onClick={() => go("deals")} />
-        <SidebarItem icon={<IconChecklist className="h-4 w-4" />}      label="Activities" active={active("activities")} onClick={() => go("activities")} />
-        <SidebarItem icon={<IconNotes className="h-4 w-4" />}          label="Notes"      active={active("notes")}      onClick={() => go("notes")} />
+        <SidebarItem asChild isActive={pathname.startsWith("/contacts")}>
+          <NavLink to="/contacts"><IconUsers className="h-4 w-4" /><span>Contacts</span></NavLink>
+        </SidebarItem>
+        <SidebarItem asChild isActive={pathname.startsWith("/companies")}>
+          <NavLink to="/companies"><IconBuilding className="h-4 w-4" /><span>Companies</span></NavLink>
+        </SidebarItem>
+        <SidebarItem asChild isActive={pathname.startsWith("/deals")}>
+          <NavLink to="/deals"><IconCurrencyDollar className="h-4 w-4" /><span>Deals</span></NavLink>
+        </SidebarItem>
+        <SidebarItem asChild isActive={pathname.startsWith("/activities")}>
+          <NavLink to="/activities"><IconChecklist className="h-4 w-4" /><span>Activities</span></NavLink>
+        </SidebarItem>
+        <SidebarItem asChild isActive={pathname.startsWith("/notes")}>
+          <NavLink to="/notes"><IconNotes className="h-4 w-4" /><span>Notes</span></NavLink>
+        </SidebarItem>
       </SidebarSection>
 
       <div className="py-1">
@@ -210,11 +199,14 @@ function AppSidebar({ user, logout, nav, go, lists, onCreateList }: {
             lists.map(list => (
               <SidebarItem
                 key={list.id}
-                icon={LIST_ENTITY_ICON[list.entity_type] ?? <IconList className="h-4 w-4" />}
-                label={list.name}
-                active={active("list_detail", list.id)}
-                onClick={() => go("list_detail", list.id)}
-              />
+                asChild
+                isActive={pathname === `/lists/${list.id}`}
+              >
+                <NavLink to={`/lists/${list.id}`}>
+                  {LIST_ENTITY_ICON[list.entity_type] ?? <IconList className="h-4 w-4" />}
+                  <span>{list.name}</span>
+                </NavLink>
+              </SidebarItem>
             ))
           )}
         </div>
@@ -225,10 +217,14 @@ function AppSidebar({ user, logout, nav, go, lists, onCreateList }: {
           {favorites.map(fav => (
             <SidebarItem
               key={fav.id}
-              icon={FAV_ICON[fav.entity_type]}
-              label={fav.label ?? fav.entity_id.slice(0, 8)}
-              onClick={() => go(`${fav.entity_type}_detail` as View, fav.entity_id)}
-            />
+              asChild
+              isActive={pathname === `/${fav.entity_type}s/${fav.entity_id}`}
+            >
+              <NavLink to={`/${fav.entity_type}s/${fav.entity_id}`}>
+                {FAV_ICON[fav.entity_type]}
+                <span>{fav.label ?? fav.entity_id.slice(0, 8)}</span>
+              </NavLink>
+            </SidebarItem>
           ))}
         </SidebarSection>
       )}

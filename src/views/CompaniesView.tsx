@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAppCollection, useAppRecord } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState,
@@ -38,7 +39,8 @@ function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: s
   );
 }
 
-function PeopleTab({ companyId, onNavigateContact }: { companyId: string; onNavigateContact?: (id: string) => void }) {
+function PeopleTab({ companyId }: { companyId: string }) {
+  const navigate = useNavigate();
   const { data: contacts } = useAppCollection<Contact>(APP_ID, "contacts");
   const people = contacts.filter(c => c.company_id === companyId);
 
@@ -48,8 +50,8 @@ function PeopleTab({ companyId, onNavigateContact }: { companyId: string; onNavi
     <ScrollArea className="flex-1">
       <div className="flex flex-col gap-2 p-3">
         {people.map(c => (
-          <div key={c.id} onClick={() => onNavigateContact?.(c.id)}
-            className={cn("flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors", onNavigateContact && "cursor-pointer hover:bg-muted/40")}
+          <div key={c.id} onClick={() => navigate(`/contacts/${c.id}`)}
+            className="flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors cursor-pointer hover:bg-muted/40"
           >
             {c.avatar_url
               ? <img src={c.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
@@ -74,7 +76,8 @@ function PeopleTab({ companyId, onNavigateContact }: { companyId: string; onNavi
   );
 }
 
-function CompanyDealsTab({ companyId, onNavigateDeal }: { companyId: string; onNavigateDeal?: (id: string) => void }) {
+function CompanyDealsTab({ companyId }: { companyId: string }) {
+  const navigate = useNavigate();
   const { data: deals } = useAppCollection<Deal>(APP_ID, "deals");
   const companyDeals = deals.filter(d => d.company_id === companyId);
   const pipeline = companyDeals.filter(d => d.stage !== "Closed Won" && d.stage !== "Closed Lost").reduce((s, d) => s + (d.value ?? 0), 0);
@@ -95,8 +98,8 @@ function CompanyDealsTab({ companyId, onNavigateDeal }: { companyId: string; onN
           {companyDeals.map(deal => {
             const sym = CURRENCY_SYMBOLS[deal.currency ?? "USD"] ?? "$";
             return (
-              <div key={deal.id} onClick={() => onNavigateDeal?.(deal.id)}
-                className={cn("flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors", onNavigateDeal && "cursor-pointer hover:bg-muted/40")}
+              <div key={deal.id} onClick={() => navigate(`/deals/${deal.id}`)}
+                className="flex items-center justify-between rounded-lg border px-3 py-2.5 transition-colors cursor-pointer hover:bg-muted/40"
               >
                 <div className="flex flex-col min-w-0">
                   <span className="text-sm font-medium truncate">{deal.title}</span>
@@ -115,9 +118,9 @@ function CompanyDealsTab({ companyId, onNavigateDeal }: { companyId: string; onN
   );
 }
 
-interface DetailProps { company: Company; onBack: () => void; onEdit: () => void; onNavigateContact?: (id: string) => void; onNavigateDeal?: (id: string) => void; }
+interface DetailProps { company: Company; onBack: () => void; onEdit: () => void; }
 
-function CompanyDetail({ company, onBack, onEdit, onNavigateContact, onNavigateDeal }: DetailProps) {
+function CompanyDetail({ company, onBack, onEdit }: DetailProps) {
   const { data: contacts }   = useAppCollection<Contact>(APP_ID, "contacts");
   const { data: deals }      = useAppCollection<Deal>(APP_ID, "deals");
   const { data: activities } = useAppCollection<Activity>(APP_ID, "activities");
@@ -206,8 +209,8 @@ function CompanyDetail({ company, onBack, onEdit, onNavigateContact, onNavigateD
             <TabsContent value="details" className="md:hidden flex-1 overflow-y-auto mt-4">
               <div className="flex flex-col gap-4 pb-4">{sidebarContent}</div>
             </TabsContent>
-            <TabsContent value="people"     className="flex-1 overflow-hidden mt-4"><PeopleTab companyId={company.id} onNavigateContact={onNavigateContact} /></TabsContent>
-            <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><CompanyDealsTab companyId={company.id} onNavigateDeal={onNavigateDeal} /></TabsContent>
+            <TabsContent value="people"     className="flex-1 overflow-hidden mt-4"><PeopleTab companyId={company.id} /></TabsContent>
+            <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><CompanyDealsTab companyId={company.id} /></TabsContent>
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="company_id" filterId={company.id} /></TabsContent>
             <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="company_id" filterId={company.id} /></TabsContent>
           </Tabs>
@@ -237,12 +240,13 @@ const FILTER_FIELDS: FilterFieldDef[] = [
   { key: "industry",    label: "Industry", type: "enum", options: INDUSTRIES.map(i => ({ label: i, value: i })) },
 ];
 
-interface Props { onNavigateContact?: (id: string) => void; onNavigateDeal?: (id: string) => void; initialSelectedId?: string | null; lists: import("@/lib/types").List[] }
+interface Props { lists: import("@/lib/types").List[] }
 
-export default function CompaniesView({ onNavigateContact, onNavigateDeal, initialSelectedId = null, lists }: Props) {
+export default function CompaniesView({ lists }: Props) {
+  const { id: selectedId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
   const [search, setSearch]             = useState("");
-  const [selectedId, setSelectedId]     = useState<string | null>(initialSelectedId);
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Company | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
@@ -290,12 +294,12 @@ export default function CompaniesView({ onNavigateContact, onNavigateDeal, initi
     if (!deleteTarget) return;
     try {
       await remove(deleteTarget.id); toast.success("Company deleted");
-      if (selectedId === deleteTarget.id) setSelectedId(null);
+      if (selectedId === deleteTarget.id) navigate("/companies");
       setDeleteTarget(null);
     } catch { toast.error("Failed to delete company"); }
   };
 
-  if (selected) return <CompanyDetail company={selected} onBack={() => setSelectedId(null)} onEdit={() => openEdit(selected)} onNavigateContact={onNavigateContact} onNavigateDeal={onNavigateDeal} />;
+  if (selected) return <CompanyDetail company={selected} onBack={() => navigate("/companies")} onEdit={() => openEdit(selected)} />;
 
   const filtered = filters.length > 0 || !!search;
   return (
@@ -314,7 +318,7 @@ export default function CompaniesView({ onNavigateContact, onNavigateDeal, initi
       </div>
       <DataTable data={companies} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
         rowCount={rowCount} onPaginationChange={onPaginationChange}
-        onRowClick={row => setSelectedId(row.id)}
+        onRowClick={row => navigate(`/companies/${row.id}`)}
         rowActions={[
           { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => openEdit(row) },
           { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },

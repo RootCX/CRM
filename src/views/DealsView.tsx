@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAppCollection, useAppRecord } from "@rootcx/sdk";
 import {
   PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState,
@@ -22,11 +23,11 @@ import { APP_ID, STAGE_STYLES, CURRENCY_SYMBOLS, STAGE_DEFAULT_PROBABILITY, PIPE
 import { AddToListDialog } from "@/components/AddToListDialog";
 import type { Contact, Company, Deal, DealContact, Activity } from "@/lib/types";
 
-function DealPeopleTab({ deal, contacts, dealContacts, onCreate, onRemove, onNavigateContact }: {
+function DealPeopleTab({ deal, contacts, dealContacts, onCreate, onRemove }: {
   deal: Deal; contacts: Contact[]; dealContacts: DealContact[];
   onCreate: (contactId: string) => Promise<void>; onRemove: (id: string) => Promise<void>;
-  onNavigateContact?: (id: string) => void;
 }) {
+  const navigate = useNavigate();
   const linked = dealContacts
     .filter(dc => dc.deal_id === deal.id)
     .map(dc => ({ dc, contact: contacts.find(c => c.id === dc.contact_id) }))
@@ -53,8 +54,8 @@ function DealPeopleTab({ deal, contacts, dealContacts, onCreate, onRemove, onNav
                     ? <img src={contact.avatar_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                     : <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-bold shrink-0">{contact.first_name.charAt(0)}{contact.last_name.charAt(0)}</div>
                   }
-                  <div className={cn("flex flex-col min-w-0 flex-1", onNavigateContact && "cursor-pointer")} onClick={() => onNavigateContact?.(contact.id)}>
-                    <span className={cn("text-sm font-medium", onNavigateContact && "hover:underline")}>{contact.first_name} {contact.last_name}</span>
+                  <div className="flex flex-col min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/contacts/${contact.id}`)}>
+                    <span className="text-sm font-medium hover:underline">{contact.first_name} {contact.last_name}</span>
                     {contact.job_title && <span className="text-xs text-muted-foreground">{contact.job_title}</span>}
                   </div>
                   <button onClick={() => onRemove(dc.id)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-accent text-muted-foreground hover:text-destructive transition-all">
@@ -74,11 +75,11 @@ function DealPeopleTab({ deal, contacts, dealContacts, onCreate, onRemove, onNav
   );
 }
 
-function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateContact, onNavigateCompany }: {
+function DealDetail({ deal, contacts, companies, onBack, onEdit }: {
   deal: Deal; contacts: Contact[]; companies: Company[];
   onBack: () => void; onEdit: () => void;
-  onNavigateContact?: (id: string) => void; onNavigateCompany?: (id: string) => void;
 }) {
+  const navigate = useNavigate();
   const { data: dealContacts, create: createDC, remove: removeDC } = useAppCollection<DealContact>(APP_ID, "deal_contacts");
   const { data: activities } = useAppCollection<Activity>(APP_ID, "activities");
   const { isFavorite, toggle: toggleFav } = useFavorites();
@@ -100,16 +101,15 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
     catch { toast.error("Failed to remove contact"); }
   };
 
-  // Reusable clickable entity link in sidebar
-  const EntityLink = ({ label, name, avatar, id, onNav }: { label: string; name: string; avatar?: string; id: string; onNav?: (id: string) => void }) => (
+  const EntityLink = ({ label, name, avatar, to }: { label: string; name: string; avatar?: string; to: string }) => (
     <div>
       <p className="text-xs text-muted-foreground mb-1.5">{label}</p>
-      <button onClick={() => onNav?.(id)} className={cn("flex items-center gap-2 w-full rounded-md p-1.5 -ml-1.5 transition-colors", onNav && "hover:bg-muted/50 cursor-pointer")}>
+      <button onClick={() => navigate(to)} className="flex items-center gap-2 w-full rounded-md p-1.5 -ml-1.5 transition-colors hover:bg-muted/50 cursor-pointer">
         {avatar
           ? <img src={avatar} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
           : <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">{name.charAt(0)}</div>
         }
-        <span className={cn("text-sm text-left", onNav && "hover:underline")}>{name}</span>
+        <span className="text-sm text-left hover:underline">{name}</span>
       </button>
     </div>
   );
@@ -131,8 +131,8 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
       {deal.source     && <div><p className="text-xs text-muted-foreground mb-1">Source</p><span className="text-sm">{deal.source}</span></div>}
       {deal.close_date && <div><p className="text-xs text-muted-foreground mb-1">Expected Close</p><p className="text-sm">{deal.close_date}</p></div>}
       <Separator />
-      {contact && <EntityLink label="Primary Contact" name={`${contact.first_name} ${contact.last_name}`} avatar={contact.avatar_url} id={contact.id} onNav={onNavigateContact} />}
-      {company && <EntityLink label="Company" name={company.name} id={company.id} onNav={onNavigateCompany} />}
+      {contact && <EntityLink label="Primary Contact" name={`${contact.first_name} ${contact.last_name}`} avatar={contact.avatar_url} to={`/contacts/${contact.id}`} />}
+      {company && <EntityLink label="Company" name={company.name} to={`/companies/${company.id}`} />}
     </>
   );
 
@@ -177,7 +177,7 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
             <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="deal_id" filterId={deal.id} /></TabsContent>
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="deal_id" filterId={deal.id} /></TabsContent>
             <TabsContent value="people"     className="flex-1 overflow-hidden mt-4">
-              <DealPeopleTab deal={deal} contacts={contacts} dealContacts={dealContacts} onCreate={handleAddContact} onRemove={handleRemoveContact} onNavigateContact={onNavigateContact} />
+              <DealPeopleTab deal={deal} contacts={contacts} dealContacts={dealContacts} onCreate={handleAddContact} onRemove={handleRemoveContact} />
             </TabsContent>
           </Tabs>
         </div>
@@ -186,12 +186,13 @@ function DealDetail({ deal, contacts, companies, onBack, onEdit, onNavigateConta
   );
 }
 
-interface Props { onNavigateContact?: (id: string) => void; onNavigateCompany?: (id: string) => void; initialSelectedId?: string | null; lists: import("@/lib/types").List[] }
+interface Props { lists: import("@/lib/types").List[] }
 
-export default function DealsView({ onNavigateContact, onNavigateCompany, initialSelectedId = null, lists }: Props) {
+export default function DealsView({ lists }: Props) {
+  const { id: selectedId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [filters, setFilters]           = useState<ActiveFilter[]>([]);
   const [search, setSearch]             = useState("");
-  const [selectedId, setSelectedId]     = useState<string | null>(initialSelectedId);
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Deal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Deal | null>(null);
@@ -270,15 +271,15 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
     if (!deleteTarget) return;
     try {
       await remove(deleteTarget.id); toast.success("Deal deleted");
-      if (selectedId === deleteTarget.id) setSelectedId(null);
+      if (selectedId === deleteTarget.id) navigate("/deals");
       setDeleteTarget(null);
     } catch { toast.error("Failed to delete deal"); }
   };
 
   if (selected) return (
     <DealDetail deal={selected} contacts={contacts} companies={companies}
-      onBack={() => setSelectedId(null)} onEdit={() => { setEditTarget(selected); setFormOpen(true); }}
-      onNavigateContact={onNavigateContact} onNavigateCompany={onNavigateCompany}
+      onBack={() => navigate("/deals")}
+      onEdit={() => { setEditTarget(selected); setFormOpen(true); }}
     />
   );
 
@@ -309,7 +310,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
             </div>
             <DataTable data={deals} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
               rowCount={rowCount} onPaginationChange={onPaginationChange}
-              onRowClick={row => setSelectedId(row.id)}
+              onRowClick={row => navigate(`/deals/${row.id}`)}
               rowActions={[
                 { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
                 { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
@@ -341,7 +342,7 @@ export default function DealsView({ onNavigateContact, onNavigateCompany, initia
                         : stageDeals.map(deal => {
                           const sym = CURRENCY_SYMBOLS[deal.currency ?? "USD"] ?? "$";
                           return (
-                            <Card key={deal.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedId(deal.id)}>
+                            <Card key={deal.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/deals/${deal.id}`)}>
                               <CardContent className="p-3 space-y-1">
                                 <p className="text-sm font-medium leading-tight">{deal.title}</p>
                                 {deal.value != null && <p className="text-xs font-semibold text-emerald-600">{sym}{deal.value.toLocaleString()}</p>}
