@@ -6,6 +6,7 @@ import {
 } from "@rootcx/ui";
 import { IconNotes, IconPlus, IconPin, IconPinnedOff, IconTrash, IconArrowLeft } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { stripMarkdown } from "@/lib/markdown";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import type { Note, Contact, Company, Deal } from "@/lib/types";
 
@@ -20,11 +21,6 @@ const FILTERS: { key: Scope; label: string }[] = [
   { key: "deals",     label: "Deals" },
   { key: "pinned",    label: "Pinned" },
 ];
-
-const preview = (html: string, max = 150) => {
-  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return text.length > max ? text.slice(0, max) + "…" : text;
-};
 
 const relativeTime = (iso: string) => {
   const diff = Date.now() - new Date(iso).getTime();
@@ -130,7 +126,7 @@ export default function NotesView() {
       if (scope === "pinned"    && !n.pinned)      return false;
       if (search) {
         const q = search.toLowerCase();
-        const text = `${n.title ?? ""} ${preview(n.body ?? "")}`.toLowerCase();
+        const text = `${n.title ?? ""} ${stripMarkdown(n.body ?? "")}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
       return true;
@@ -252,7 +248,7 @@ export default function NotesView() {
                     </div>
                   </div>
                   {note.body && (
-                    <p className="text-xs text-muted-foreground line-clamp-4">{preview(note.body)}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-4">{stripMarkdown(note.body, 150)}</p>
                   )}
                   <div className="mt-3 flex items-center justify-between gap-2">
                     {label && <Badge variant="outline" className="text-xs">{label}</Badge>}

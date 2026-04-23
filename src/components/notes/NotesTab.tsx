@@ -3,6 +3,7 @@ import { useAppCollection } from "@rootcx/sdk";
 import { ScrollArea, Button, EmptyState, ConfirmDialog, toast } from "@rootcx/ui";
 import { IconNotes, IconPin, IconPinnedOff, IconTrash, IconArrowLeft, IconPlus } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
+import { stripMarkdown } from "@/lib/markdown";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
 import type { Note } from "@/lib/types";
 
@@ -14,12 +15,6 @@ interface Props {
   filterKey: FilterKey;
   filterId: string;
 }
-
-// strip HTML for card preview
-const preview = (html: string, max = 120) => {
-  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  return text.length > max ? text.slice(0, max) + "…" : text;
-};
 
 const relativeTime = (iso: string) => {
   const diff = Date.now() - new Date(iso).getTime();
@@ -136,7 +131,7 @@ function NoteCard({ note, onClick, onPin, onDelete }: CardProps) {
         </div>
       </div>
       {note.body && (
-        <p className="text-xs text-muted-foreground line-clamp-2">{preview(note.body)}</p>
+        <p className="text-xs text-muted-foreground line-clamp-2">{stripMarkdown(note.body, 120)}</p>
       )}
       <p className="mt-1.5 text-xs text-muted-foreground/60">{relativeTime(note.created_at)}</p>
     </div>
