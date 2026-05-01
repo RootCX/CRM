@@ -1,10 +1,13 @@
 import { useAppCollection } from "@rootcx/sdk";
-import { Button, EmptyState, ScrollArea, toast, FormDialog, ConfirmDialog } from "@rootcx/ui";
+import { Button, EmptyState, ScrollArea, toast, ConfirmDialog } from "@rootcx/ui";
 import { IconCheck, IconPlus, IconTrash, IconEdit, IconChecklist } from "@tabler/icons-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { EntityFormDialog } from "@/components/EntityFormDialog";
+import type { ExtendedFieldDefinition } from "@/components/EntityFormDialog";
+import { ENTITY_CONFIGS } from "@/components/EntityTypeahead";
 import { APP_ID, TYPE_STYLES } from "@/lib/constants";
-import type { Activity, Contact, Company, Deal } from "@/lib/types";
+import type { Activity } from "@/lib/types";
 
 interface Props {
   filterKey: "contact_id" | "company_id" | "deal_id";
@@ -13,9 +16,6 @@ interface Props {
 
 export function ActivitiesTab({ filterKey, filterId }: Props) {
   const { data: all, loading, create, update, remove } = useAppCollection<Activity>(APP_ID, "activities");
-  const { data: contacts }  = useAppCollection<Contact>(APP_ID, "contacts");
-  const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
-  const { data: deals }     = useAppCollection<Deal>(APP_ID, "deals");
 
   const [formOpen, setFormOpen]         = useState(false);
   const [editTarget, setEditTarget]     = useState<Activity | null>(null);
@@ -32,14 +32,14 @@ export function ActivitiesTab({ filterKey, filterId }: Props) {
 
   const pending = activities.filter(a => !a.done).length;
 
-  const formFields = [
+  const formFields: ExtendedFieldDefinition[] = [
     { name: "type",       label: "Type",    type: "select"   as const, required: true, options: ["Call","Email","Meeting","Task"].map(t => ({ label: t, value: t })) },
     { name: "subject",    label: "Subject", type: "text"     as const, required: true },
     { name: "body",       label: "Notes",   type: "textarea" as const },
     { name: "due_date",   label: "Due Date",type: "date"     as const },
-    { name: "contact_id", label: "Contact", type: "select"   as const, options: contacts.map(c => ({ label: `${c.first_name} ${c.last_name}`, value: c.id })) },
-    { name: "company_id", label: "Company", type: "select"   as const, options: companies.map(c => ({ label: c.name, value: c.id })) },
-    { name: "deal_id",    label: "Deal",    type: "select"   as const, options: deals.map(d => ({ label: d.title, value: d.id })) },
+    { name: "contact_id", label: "Contact", type: "relation" as const, config: ENTITY_CONFIGS.contacts },
+    { name: "company_id", label: "Company", type: "relation" as const, config: ENTITY_CONFIGS.companies },
+    { name: "deal_id",    label: "Deal",    type: "relation" as const, config: ENTITY_CONFIGS.deals },
   ];
 
   const openForm = (a: Activity | null = null) => { setEditTarget(a); setFormOpen(true); };
@@ -108,7 +108,7 @@ export function ActivitiesTab({ filterKey, filterId }: Props) {
         </ScrollArea>
       )}
 
-      <FormDialog
+      <EntityFormDialog
         open={formOpen} onOpenChange={o => o ? undefined : closeForm()}
         title={editTarget ? "Edit Activity" : "Log Activity"}
         description={editTarget ? "Update activity details" : "Record a new activity"}

@@ -5,7 +5,7 @@ import {
   PageHeader, Tabs, TabsList, TabsTrigger, TabsContent,
   Card, CardContent, CardHeader, CardTitle,
   Badge, StatusBadge, Button, Separator,
-  FormDialog, ConfirmDialog, LoadingState, ErrorState, EmptyState,
+  ConfirmDialog, LoadingState, ErrorState, EmptyState,
   ScrollArea, toast,
 } from "@rootcx/ui";
 import {
@@ -18,6 +18,9 @@ import { cn } from "@/lib/utils";
 import { NotesTab } from "@/components/notes/NotesTab";
 import { ActivitiesTab } from "@/components/ActivitiesTab";
 import { useFavorites } from "@/hooks/useFavorites";
+import { EntityFormDialog } from "@/components/EntityFormDialog";
+import type { ExtendedFieldDefinition } from "@/components/EntityFormDialog";
+import { ENTITY_CONFIGS } from "@/components/EntityTypeahead";
 import { APP_ID, STATUS_MAP, STAGE_STYLES, CURRENCY_SYMBOLS } from "@/lib/constants";
 import type { Contact, Company, Deal, StoredEmail } from "@/lib/types";
 
@@ -190,7 +193,7 @@ export default function ContactDetail() {
   const pendingCount = activities.filter(a => a.contact_id === contactId && !a.done).length;
   const isFav        = isFavorite("contact", contactId!);
 
-  const formFields = [
+  const formFields: ExtendedFieldDefinition[] = [
     { name: "first_name",     label: "First Name",   type: "text"   as const, required: true },
     { name: "last_name",      label: "Last Name",    type: "text"   as const, required: true },
     { name: "email",          label: "Email",        type: "text"   as const },
@@ -200,7 +203,7 @@ export default function ContactDetail() {
     { name: "avatar_url",     label: "Avatar URL",   type: "text"   as const },
     { name: "linkedin_url",   label: "LinkedIn URL", type: "text"   as const },
     { name: "twitter_handle", label: "Twitter / X",  type: "text"   as const },
-    { name: "company_id",     label: "Company",      type: "select" as const, options: companies.map(c => ({ label: c.name, value: c.id })) },
+    { name: "company_id",     label: "Company",      type: "relation" as const, config: ENTITY_CONFIGS.companies },
     { name: "status",         label: "Status",       type: "select" as const, options: ["Lead","Prospect","Customer","Churned"].map(s => ({ label: s, value: s })) },
   ];
 
@@ -299,7 +302,7 @@ export default function ContactDetail() {
         </div>
       </div>
 
-      <FormDialog open={editOpen} onOpenChange={setEditOpen} title="Edit Contact" description="Update contact details"
+      <EntityFormDialog open={editOpen} onOpenChange={setEditOpen} title="Edit Contact" description="Update contact details"
         fields={formFields} defaultValues={contact} onSubmit={async v => { try { await update(v); toast.success("Contact updated"); setEditOpen(false); } catch { toast.error("Failed to update contact"); } }} submitLabel="Save Changes"
       />
       <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} title="Delete Contact"

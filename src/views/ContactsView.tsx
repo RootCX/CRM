@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppCollection } from "@rootcx/sdk";
-import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, StatusBadge, Button, SearchInput, toast } from "@rootcx/ui";
+import { PageHeader, DataTable, ConfirmDialog, EmptyState, StatusBadge, Button, SearchInput, toast } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconUsers, IconList } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import { EntityFormDialog } from "@/components/EntityFormDialog";
+import type { ExtendedFieldDefinition } from "@/components/EntityFormDialog";
+import { ENTITY_CONFIGS } from "@/components/EntityTypeahead";
 import { usePaginatedCollection } from "@/hooks/usePaginatedCollection";
 import { mergeWhere, buildSearchClause } from "@/lib/search";
 import { APP_ID, STATUS_MAP, CONTACT_STATUSES } from "@/lib/constants";
@@ -56,9 +59,9 @@ export default function ContactsView({ lists }: { lists: import("@/lib/types").L
     { key: "company_id", label: "Company", type: "entity_link", options: companyOptions },
   ];
 
-  const formFields = [
+  const formFields: ExtendedFieldDefinition[] = [
     ...FORM_FIELDS,
-    { name: "company_id", label: "Company", type: "select" as const, options: companyOptions },
+    { name: "company_id", label: "Company", type: "relation" as const, config: ENTITY_CONFIGS.companies },
     { name: "status",     label: "Status",  type: "select" as const, options: STATUS_OPTIONS },
   ];
 
@@ -119,7 +122,7 @@ export default function ContactsView({ lists }: { lists: import("@/lib/types").L
         bulkActions={[{ label: "Delete selected", destructive: true, onClick: async rows => { await Promise.all(rows.map(r => remove(r.id))); toast.success(`${rows.length} contacts deleted`); } }]}
         emptyState={<EmptyState icon={<IconUsers className="h-8 w-8" />} title={filtered ? "No contacts match these filters" : "No contacts yet"} description={filtered ? "Try adjusting or clearing your filters" : "Add your first contact to get started"} action={filtered ? undefined : <Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Contact</Button>} />}
       />
-      <FormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
+      <EntityFormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
         title={editTarget ? "Edit Contact" : "New Contact"} description={editTarget ? "Update contact details" : "Add a new contact to your CRM"}
         fields={formFields} defaultValues={editTarget ?? {}} onSubmit={handleSubmit} submitLabel={editTarget ? "Save Changes" : "Create Contact"}
       />

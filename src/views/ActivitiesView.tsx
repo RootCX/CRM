@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useAppCollection } from "@rootcx/sdk";
-import { PageHeader, DataTable, FormDialog, ConfirmDialog, EmptyState, SearchInput, Button, toast } from "@rootcx/ui";
+import { PageHeader, DataTable, ConfirmDialog, EmptyState, SearchInput, Button, toast } from "@rootcx/ui";
 import { IconPlus, IconEdit, IconTrash, IconChecklist, IconCheck } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { cn } from "@/lib/utils";
 import { FilterBuilder, buildWhereClause } from "@/components/FilterBuilder";
 import type { ActiveFilter, FilterFieldDef } from "@/components/FilterBuilder";
+import { EntityFormDialog } from "@/components/EntityFormDialog";
+import type { ExtendedFieldDefinition } from "@/components/EntityFormDialog";
+import { ENTITY_CONFIGS } from "@/components/EntityTypeahead";
 import { usePaginatedCollection } from "@/hooks/usePaginatedCollection";
 import { mergeWhere, buildSearchClause } from "@/lib/search";
 import { APP_ID, TYPE_STYLES } from "@/lib/constants";
@@ -34,13 +37,13 @@ export default function ActivitiesView() {
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
   const { data: deals }     = useAppCollection<Deal>(APP_ID, "deals");
 
-  const formFields = [
+  const formFields: ExtendedFieldDefinition[] = [
     { name: "type",       label: "Type",    type: "select"   as const, required: true, options: ACTIVITY_TYPES.map(t => ({ label: t, value: t })) },
     { name: "subject",    label: "Subject", type: "text"     as const, required: true },
     { name: "body",       label: "Notes",   type: "textarea" as const },
-    { name: "contact_id", label: "Contact", type: "select"   as const, options: contacts.map(c => ({ label: `${c.first_name} ${c.last_name}`, value: c.id })) },
-    { name: "company_id", label: "Company", type: "select"   as const, options: companies.map(c => ({ label: c.name, value: c.id })) },
-    { name: "deal_id",    label: "Deal",    type: "select"   as const, options: deals.map(d => ({ label: d.title, value: d.id })) },
+    { name: "contact_id", label: "Contact", type: "relation" as const, config: ENTITY_CONFIGS.contacts },
+    { name: "company_id", label: "Company", type: "relation" as const, config: ENTITY_CONFIGS.companies },
+    { name: "deal_id",    label: "Deal",    type: "relation" as const, config: ENTITY_CONFIGS.deals },
     { name: "due_date",   label: "Due Date",type: "date"     as const },
   ];
 
@@ -110,7 +113,7 @@ export default function ActivitiesView() {
         bulkActions={[{ label: "Delete selected", destructive: true, onClick: async rows => { await Promise.all(rows.map(r => remove(r.id))); toast.success(`${rows.length} activities deleted`); } }]}
         emptyState={<EmptyState icon={<IconChecklist className="h-8 w-8" />} title="No activities" description="Log calls, emails, meetings, and tasks" action={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Log Activity</Button>} />}
       />
-      <FormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
+      <EntityFormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
         title={editTarget ? "Edit Activity" : "Log Activity"} description={editTarget ? "Update activity details" : "Record a new activity"}
         fields={formFields} defaultValues={editTarget ?? {}} onSubmit={handleSubmit} submitLabel={editTarget ? "Save Changes" : "Log Activity"}
       />

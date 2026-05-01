@@ -6,6 +6,9 @@ import {
   Tabs, TabsList, TabsTrigger, TabsContent,
   Card, CardContent, Button, Separator, SearchInput, ScrollArea, Badge, toast,
 } from "@rootcx/ui";
+import { EntityFormDialog } from "@/components/EntityFormDialog";
+import type { ExtendedFieldDefinition } from "@/components/EntityFormDialog";
+import { ENTITY_CONFIGS } from "@/components/EntityTypeahead";
 import {
   IconPlus, IconEdit, IconTrash, IconCurrencyDollar, IconNotes, IconList,
   IconUsers, IconChecklist, IconStarFilled, IconStar, IconInfoCircle,
@@ -67,8 +70,8 @@ function DealPeopleTab({ deal, contacts, dealContacts, onCreate, onRemove }: {
           </ScrollArea>
         )
       }
-      <FormDialog open={addOpen} onOpenChange={setAddOpen} title="Add Contact to Deal" description="Link an existing contact to this deal"
-        fields={[{ name: "contact_id", label: "Contact", type: "select" as const, required: true, options: available.map(c => ({ label: `${c.first_name} ${c.last_name}`, value: c.id })) }]}
+      <EntityFormDialog open={addOpen} onOpenChange={setAddOpen} title="Add Contact to Deal" description="Link an existing contact to this deal"
+        fields={[{ name: "contact_id", label: "Contact", type: "relation" as const, required: true, config: ENTITY_CONFIGS.contacts }]}
         defaultValues={{}} onSubmit={async v => { await onCreate(v.contact_id as string); setAddOpen(false); }} submitLabel="Add Contact"
       />
     </div>
@@ -220,15 +223,15 @@ export default function DealsView({ lists }: Props) {
     { key: "company_id", label: "Company",  type: "entity_link", options: companies.map(c => ({ label: c.name, value: c.id })) },
   ];
 
-  const formFields = [
+  const formFields: ExtendedFieldDefinition[] = [
     { name: "title",       label: "Deal Title",         type: "text"   as const, required: true },
     { name: "stage",       label: "Stage",              type: "select" as const, required: true, options: STAGE_OPTIONS },
     { name: "value",       label: "Value",              type: "number" as const },
     { name: "currency",    label: "Currency",           type: "select" as const, options: CURRENCY_OPTIONS },
     { name: "probability", label: "Probability (%)",    type: "number" as const },
     { name: "source",      label: "Source",             type: "select" as const, options: SOURCE_OPTIONS },
-    { name: "contact_id",  label: "Primary Contact",    type: "select" as const, options: contacts.map(c => ({ label: `${c.first_name} ${c.last_name}`, value: c.id })) },
-    { name: "company_id",  label: "Company",            type: "select" as const, options: companies.map(c => ({ label: c.name, value: c.id })) },
+    { name: "contact_id",  label: "Primary Contact",    type: "relation" as const, config: ENTITY_CONFIGS.contacts },
+    { name: "company_id",  label: "Company",            type: "relation" as const, config: ENTITY_CONFIGS.companies },
     { name: "close_date",  label: "Expected Close Date",type: "date"   as const },
   ];
 
@@ -369,7 +372,7 @@ export default function DealsView({ lists }: Props) {
           </Tabs>
         </div>
       )}
-      <FormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
+      <EntityFormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
         title={editTarget ? "Edit Deal" : "New Deal"} description={editTarget ? "Update deal details" : "Add a new deal to your pipeline"}
         fields={formFields} defaultValues={editTarget ?? {}} onSubmit={handleSubmit} submitLabel={editTarget ? "Save Changes" : "Create Deal"}
       />
