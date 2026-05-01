@@ -1,13 +1,14 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useAppCollection } from "@rootcx/sdk";
 import { ScrollArea, Button, EmptyState, ConfirmDialog, toast } from "@rootcx/ui";
 import { IconNotes, IconPin, IconPinnedOff, IconTrash, IconArrowLeft, IconPlus } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { stripMarkdown } from "@/lib/markdown";
 import { RichTextEditor } from "@/components/editor/RichTextEditor";
-import type { Note } from "@/lib/types";
-
-const APP_ID = "crm";
+import { NoteAttachments } from "@/components/notes/NoteAttachments";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { APP_ID } from "@/lib/constants";
+import type { Attachment, Note } from "@/lib/types";
 
 type FilterKey = "contact_id" | "company_id" | "deal_id";
 
@@ -32,12 +33,13 @@ const relativeTime = (iso: string) => {
 
 interface EditorProps {
   note: Note;
+  attachmentCount: number;
   onSave: (id: string, fields: { title: string; body: string }) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onBack: () => void;
 }
 
-function NoteEditor({ note, onSave, onDelete, onBack }: EditorProps) {
+function NoteEditor({ note, attachmentCount, onSave, onDelete, onBack }: EditorProps) {
   const [title, setTitle] = useState(note.title ?? "");
   const [body, setBody] = useState(note.body ?? "");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -83,11 +85,13 @@ function NoteEditor({ note, onSave, onDelete, onBack }: EditorProps) {
         <RichTextEditor content={body} onChange={setBody} />
       </ScrollArea>
 
+      <NoteAttachments noteId={note.id} />
+
       <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Delete note"
-        description="This cannot be undone."
+        description={attachmentCount > 0 ? `This will also delete ${attachmentCount} attachment${attachmentCount > 1 ? "s" : ""}. This cannot be undone.` : "This cannot be undone."}
         confirmLabel="Delete"
         destructive
         onConfirm={async () => { await onDelete(note.id); setDeleteOpen(false); onBack(); }}
@@ -142,16 +146,23 @@ function NoteCard({ note, onClick, onPin, onDelete }: CardProps) {
 
 export function NotesTab({ filterKey, filterId }: Props) {
   const { data: allNotes, loading, create, update, remove } = useAppCollection<Note>(APP_ID, "notes");
+  const { deleteFile } = useFileUpload();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const notes = allNotes
     .filter(n => n[filterKey] === filterId)
     .sort((a, b) => {
-      // pinned first, then by updated_at desc
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
+
+  const noteIds = useMemo(() => notes.map(n => n.id), [notes]);
+  const { data: entityAttachments } = useAppCollection<Attachment>(APP_ID, "attachments",
+    noteIds.length > 0 ? { where: { note_id: { $in: noteIds } } } : undefined,
+  );
+  const attachmentsRef = useRef(entityAttachments);
+  attachmentsRef.current = entityAttachments;
 
   const activeNote = notes.find(n => n.id === activeId) ?? null;
 
@@ -168,9 +179,13 @@ export function NotesTab({ filterKey, filterId }: Props) {
   }, [update]);
 
   const handleDelete = useCallback(async (id: string) => {
-    try { await remove(id); toast.success("Note deleted"); }
-    catch { toast.error("Failed to delete note"); }
-  }, [remove]);
+    try {
+      const noteAttachments = attachmentsRef.current.filter(a => a.note_id === id);
+      await Promise.all(noteAttachments.map(a => deleteFile(a.file_id).catch(() => {})));
+      await remove(id);
+      toast.success("Note deleted");
+    } catch { toast.error("Failed to delete note"); }
+  }, [remove, deleteFile]);
 
   const handlePin = useCallback(async (note: Note) => {
     try { await update(note.id, { pinned: !note.pinned }); }
@@ -181,6 +196,7 @@ export function NotesTab({ filterKey, filterId }: Props) {
     return (
       <NoteEditor
         note={activeNote}
+        attachmentCount={entityAttachments.filter(a => a.note_id === activeNote.id).length}
         onSave={handleSave}
         onDelete={handleDelete}
         onBack={() => setActiveId(null)}
@@ -228,7 +244,7 @@ export function NotesTab({ filterKey, filterId }: Props) {
         open={!!deleteTarget}
         onOpenChange={o => !o && setDeleteTarget(null)}
         title="Delete note"
-        description="This cannot be undone."
+        description={(() => { const count = deleteTarget ? entityAttachments.filter(a => a.note_id === deleteTarget).length : 0; return count > 0 ? `This will also delete ${count} attachment${count > 1 ? "s" : ""}. This cannot be undone.` : "This cannot be undone."; })()}
         confirmLabel="Delete"
         destructive
         onConfirm={async () => { if (deleteTarget) { await handleDelete(deleteTarget); setDeleteTarget(null); } }}

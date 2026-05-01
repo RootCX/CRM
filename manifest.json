@@ -116,6 +116,19 @@
       ]
     },
     {
+      "entityName": "attachments",
+      "fields": [
+        { "name": "file_id",      "type": "text", "required": true },
+        { "name": "filename",     "type": "text", "required": true },
+        { "name": "content_type", "type": "text" },
+        { "name": "size",         "type": "number" },
+        { "name": "note_id",      "type": "entity_link", "onDelete": "cascade", "references": { "entity": "notes",     "field": "id" } },
+        { "name": "contact_id",   "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts",  "field": "id" } },
+        { "name": "company_id",   "type": "entity_link", "onDelete": "cascade", "references": { "entity": "companies", "field": "id" } },
+        { "name": "deal_id",      "type": "entity_link", "onDelete": "cascade", "references": { "entity": "deals",     "field": "id" } }
+      ]
+    },
+    {
       "entityName": "favorites",
       "fields": [
         { "name": "entity_type", "type": "text", "required": true, "enum_values": ["contact", "company", "deal"] },
@@ -145,6 +158,8 @@
       { "key": "lists.write",          "description": "Create and manage lists" },
       { "key": "list_records.read",    "description": "View list records" },
       { "key": "list_records.write",   "description": "Add and remove list records" },
+      { "key": "attachments.read",    "description": "View attachments" },
+      { "key": "attachments.write",   "description": "Upload and manage attachments" },
       { "key": "favorites.read",      "description": "View favorites" },
       { "key": "favorites.write",     "description": "Manage favorites" }
     ]

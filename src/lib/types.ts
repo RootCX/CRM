@@ -114,6 +114,20 @@ export interface ListRecord {
   created_at: string;
 }
 
+export interface Attachment {
+  id: string;
+  file_id: string;
+  filename: string;
+  content_type?: string;
+  size?: number;
+  note_id?: string;
+  contact_id?: string;
+  company_id?: string;
+  deal_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Favorite {
   id: string;
   entity_type: "contact" | "company" | "deal";
