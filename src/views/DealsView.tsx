@@ -276,98 +276,99 @@ export default function DealsView({ lists }: Props) {
     } catch { toast.error("Failed to delete deal"); }
   };
 
-  if (selected) return (
-    <DealDetail deal={selected} contacts={contacts} companies={companies}
-      onBack={() => navigate("/deals")}
-      onEdit={() => { setEditTarget(selected); setFormOpen(true); }}
-    />
-  );
-
   const filtered = filters.length > 0 || !!search;
   const totalPipelineValue = allDeals.filter(d => PIPELINE_STAGES.includes(d.stage)).reduce((s, d) => s + (d.value ?? 0), 0);
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <PageHeader title="Deals" description="Track your sales pipeline and close deals"
-        actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Deal</Button>}
-      />
-      <Tabs defaultValue="list" onValueChange={v => setPipelineActive(v === "pipeline")}>
-        <div className="flex flex-col gap-4">
-          <TabsList className="w-fit">
-            <TabsTrigger value="list">List</TabsTrigger>
-            <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
-          </TabsList>
+    <>
+      {selected ? (
+        <DealDetail deal={selected} contacts={contacts} companies={companies}
+          onBack={() => navigate("/deals")}
+          onEdit={() => { setEditTarget(selected); setFormOpen(true); }}
+        />
+      ) : (
+        <div className="p-4 md:p-6 space-y-4">
+          <PageHeader title="Deals" description="Track your sales pipeline and close deals"
+            actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Deal</Button>}
+          />
+          <Tabs defaultValue="list" onValueChange={v => setPipelineActive(v === "pipeline")}>
+            <div className="flex flex-col gap-4">
+              <TabsList className="w-fit">
+                <TabsTrigger value="list">List</TabsTrigger>
+                <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="list" className="space-y-4 mt-0">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <SearchInput value={search} onChange={setSearch} placeholder="Search deals…" debounceMs={300} />
-              <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
-              {rowCount > 0 && (
-                <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
-                  <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
-                </Button>
-              )}
-            </div>
-            <DataTable data={deals} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
-              rowCount={rowCount} onPaginationChange={onPaginationChange}
-              onRowClick={row => navigate(`/deals/${row.id}`)}
-              rowActions={[
-                { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
-                { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
-              ]}
-              bulkActions={[{ label: "Delete selected", destructive: true, onClick: async rows => { await Promise.all(rows.map(r => remove(r.id))); toast.success(`${rows.length} deals deleted`); } }]}
-              emptyState={<EmptyState icon={<IconCurrencyDollar className="h-8 w-8" />} title={filtered ? "No deals match these filters" : "No deals yet"} description={filtered ? "Try adjusting or clearing your filters" : "Start tracking your sales pipeline"} action={filtered ? undefined : <Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Deal</Button>} />}
-            />
-          </TabsContent>
+              <TabsContent value="list" className="space-y-4 mt-0">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <SearchInput value={search} onChange={setSearch} placeholder="Search deals…" debounceMs={300} />
+                  <FilterBuilder fields={filterFields} filters={filters} onChange={setFilters} />
+                  {rowCount > 0 && (
+                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
+                      <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
+                    </Button>
+                  )}
+                </div>
+                <DataTable data={deals} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
+                  rowCount={rowCount} onPaginationChange={onPaginationChange}
+                  onRowClick={row => navigate(`/deals/${row.id}`)}
+                  rowActions={[
+                    { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => { setEditTarget(row); setFormOpen(true); } },
+                    { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
+                  ]}
+                  bulkActions={[{ label: "Delete selected", destructive: true, onClick: async rows => { await Promise.all(rows.map(r => remove(r.id))); toast.success(`${rows.length} deals deleted`); } }]}
+                  emptyState={<EmptyState icon={<IconCurrencyDollar className="h-8 w-8" />} title={filtered ? "No deals match these filters" : "No deals yet"} description={filtered ? "Try adjusting or clearing your filters" : "Start tracking your sales pipeline"} action={filtered ? undefined : <Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Deal</Button>} />}
+                />
+              </TabsContent>
 
-          <TabsContent value="pipeline" className="mt-0">
-            <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-              <IconCurrencyDollar className="h-4 w-4" />
-              Pipeline value: <strong className="text-foreground">${totalPipelineValue.toLocaleString()}</strong>
+              <TabsContent value="pipeline" className="mt-0">
+                <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
+                  <IconCurrencyDollar className="h-4 w-4" />
+                  Pipeline value: <strong className="text-foreground">${totalPipelineValue.toLocaleString()}</strong>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:grid-cols-4">
+                  {PIPELINE_STAGES.map(stage => {
+                    const stageDeals = allDeals.filter(d => d.stage === stage);
+                    const stageValue = stageDeals.reduce((s, d) => s + (d.value ?? 0), 0);
+                    return (
+                      <div key={stage} className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium border", STAGE_STYLES[stage])}>{stage}</span>
+                          <span className="text-xs text-muted-foreground">{stageDeals.length}</span>
+                        </div>
+                        {stageValue > 0 && <p className="text-xs text-muted-foreground">${stageValue.toLocaleString()}</p>}
+                        <div className="flex flex-col gap-2 min-h-24">
+                          {stageDeals.length === 0
+                            ? <div className="rounded-lg border border-dashed p-3 text-xs text-center text-muted-foreground">No deals</div>
+                            : stageDeals.map(deal => {
+                              const sym = CURRENCY_SYMBOLS[deal.currency ?? "USD"] ?? "$";
+                              return (
+                                <Card key={deal.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/deals/${deal.id}`)}>
+                                  <CardContent className="p-3 space-y-1">
+                                    <p className="text-sm font-medium leading-tight">{deal.title}</p>
+                                    {deal.value != null && <p className="text-xs font-semibold text-emerald-600">{sym}{deal.value.toLocaleString()}</p>}
+                                    {deal.probability != null && (
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${deal.probability}%` }} /></div>
+                                        <span className="text-xs text-muted-foreground">{deal.probability}%</span>
+                                      </div>
+                                    )}
+                                    {deal.company_id  && <p className="text-xs text-muted-foreground">{companyName(deal.company_id)}</p>}
+                                    {deal.close_date  && <p className="text-xs text-muted-foreground">Close: {deal.close_date}</p>}
+                                  </CardContent>
+                                </Card>
+                              );
+                            })
+                          }
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </TabsContent>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:grid-cols-4">
-              {PIPELINE_STAGES.map(stage => {
-                const stageDeals = allDeals.filter(d => d.stage === stage);
-                const stageValue = stageDeals.reduce((s, d) => s + (d.value ?? 0), 0);
-                return (
-                  <div key={stage} className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium border", STAGE_STYLES[stage])}>{stage}</span>
-                      <span className="text-xs text-muted-foreground">{stageDeals.length}</span>
-                    </div>
-                    {stageValue > 0 && <p className="text-xs text-muted-foreground">${stageValue.toLocaleString()}</p>}
-                    <div className="flex flex-col gap-2 min-h-24">
-                      {stageDeals.length === 0
-                        ? <div className="rounded-lg border border-dashed p-3 text-xs text-center text-muted-foreground">No deals</div>
-                        : stageDeals.map(deal => {
-                          const sym = CURRENCY_SYMBOLS[deal.currency ?? "USD"] ?? "$";
-                          return (
-                            <Card key={deal.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/deals/${deal.id}`)}>
-                              <CardContent className="p-3 space-y-1">
-                                <p className="text-sm font-medium leading-tight">{deal.title}</p>
-                                {deal.value != null && <p className="text-xs font-semibold text-emerald-600">{sym}{deal.value.toLocaleString()}</p>}
-                                {deal.probability != null && (
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden"><div className="h-full bg-emerald-400 rounded-full" style={{ width: `${deal.probability}%` }} /></div>
-                                    <span className="text-xs text-muted-foreground">{deal.probability}%</span>
-                                  </div>
-                                )}
-                                {deal.company_id  && <p className="text-xs text-muted-foreground">{companyName(deal.company_id)}</p>}
-                                {deal.close_date  && <p className="text-xs text-muted-foreground">Close: {deal.close_date}</p>}
-                              </CardContent>
-                            </Card>
-                          );
-                        })
-                      }
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </TabsContent>
+          </Tabs>
         </div>
-      </Tabs>
-
+      )}
       <FormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
         title={editTarget ? "Edit Deal" : "New Deal"} description={editTarget ? "Update deal details" : "Add a new deal to your pipeline"}
         fields={formFields} defaultValues={editTarget ?? {}} onSubmit={handleSubmit} submitLabel={editTarget ? "Save Changes" : "Create Deal"}
@@ -377,6 +378,6 @@ export default function DealsView({ lists }: Props) {
         onConfirm={handleDelete} confirmLabel="Delete" destructive
       />
       <AddToListDialog open={addToListOpen} onOpenChange={setAddToListOpen} entityType="deals" where={where} totalCount={rowCount} lists={lists} />
-    </div>
+    </>
   );
 }

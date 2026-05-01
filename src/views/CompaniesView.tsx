@@ -299,33 +299,38 @@ export default function CompaniesView({ lists }: Props) {
     } catch { toast.error("Failed to delete company"); }
   };
 
-  if (selected) return <CompanyDetail company={selected} onBack={() => navigate("/companies")} onEdit={() => openEdit(selected)} />;
-
   const filtered = filters.length > 0 || !!search;
+
   return (
-    <div className="p-4 md:p-6 space-y-4">
-      <PageHeader title="Companies" description="Manage the companies in your pipeline"
-        actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Company</Button>}
-      />
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search companies…" debounceMs={300} />
-        <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
-        {rowCount > 0 && (
-          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
-            <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
-          </Button>
-        )}
-      </div>
-      <DataTable data={companies} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
-        rowCount={rowCount} onPaginationChange={onPaginationChange}
-        onRowClick={row => navigate(`/companies/${row.id}`)}
-        rowActions={[
-          { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => openEdit(row) },
-          { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
-        ]}
-        bulkActions={[{ label: "Delete selected", destructive: true, onClick: async rows => { await Promise.all(rows.map(r => remove(r.id))); toast.success(`${rows.length} companies deleted`); } }]}
-        emptyState={<EmptyState icon={<IconBuilding className="h-8 w-8" />} title={filtered ? "No companies match these filters" : "No companies yet"} description={filtered ? "Try adjusting or clearing your filters" : "Add your first company to track your accounts"} action={filtered ? undefined : <Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Company</Button>} />}
-      />
+    <>
+      {selected ? (
+        <CompanyDetail company={selected} onBack={() => navigate("/companies")} onEdit={() => openEdit(selected)} />
+      ) : (
+        <div className="p-4 md:p-6 space-y-4">
+          <PageHeader title="Companies" description="Manage the companies in your pipeline"
+            actions={<Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Company</Button>}
+          />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <SearchInput value={search} onChange={setSearch} placeholder="Search companies…" debounceMs={300} />
+            <FilterBuilder fields={FILTER_FIELDS} filters={filters} onChange={setFilters} />
+            {rowCount > 0 && (
+              <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddToListOpen(true)}>
+                <IconList className="h-4 w-4 mr-1.5" /> Add {rowCount.toLocaleString()} to list
+              </Button>
+            )}
+          </div>
+          <DataTable data={companies} columns={columns} loading={loading} pageSize={pagination.pageSize} selectable
+            rowCount={rowCount} onPaginationChange={onPaginationChange}
+            onRowClick={row => navigate(`/companies/${row.id}`)}
+            rowActions={[
+              { label: "Edit",   icon: <IconEdit  className="h-4 w-4" />, onClick: row => openEdit(row) },
+              { label: "Delete", icon: <IconTrash className="h-4 w-4" />, onClick: row => setDeleteTarget(row), destructive: true },
+            ]}
+            bulkActions={[{ label: "Delete selected", destructive: true, onClick: async rows => { await Promise.all(rows.map(r => remove(r.id))); toast.success(`${rows.length} companies deleted`); } }]}
+            emptyState={<EmptyState icon={<IconBuilding className="h-8 w-8" />} title={filtered ? "No companies match these filters" : "No companies yet"} description={filtered ? "Try adjusting or clearing your filters" : "Add your first company to track your accounts"} action={filtered ? undefined : <Button onClick={() => { setEditTarget(null); setFormOpen(true); }}><IconPlus className="h-4 w-4 mr-1.5" /> Add Company</Button>} />}
+          />
+        </div>
+      )}
       <FormDialog open={formOpen} onOpenChange={o => { setFormOpen(o); if (!o) setEditTarget(null); }}
         title={editTarget ? "Edit Company" : "New Company"} description={editTarget ? "Update company details" : "Add a new company to your CRM"}
         fields={FORM_FIELDS} defaultValues={editTarget ?? {}} onSubmit={handleSubmit} submitLabel={editTarget ? "Save Changes" : "Create Company"}
@@ -335,6 +340,6 @@ export default function CompaniesView({ lists }: Props) {
         onConfirm={handleDelete} confirmLabel="Delete" destructive
       />
       <AddToListDialog open={addToListOpen} onOpenChange={setAddToListOpen} entityType="companies" where={where} totalCount={rowCount} lists={lists} />
-    </div>
+    </>
   );
 }
