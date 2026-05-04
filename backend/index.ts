@@ -1,9 +1,12 @@
 const APP_ID = "crm";
-const GMAIL = "/api/v1/integrations/gmail/actions";
+const PROVIDERS: Record<string, string> = {
+  gmail: "/api/v1/integrations/gmail/actions",
+  outlook: "/api/v1/integrations/outlook/actions",
+};
 const COL_SYNC = `/api/v1/apps/${APP_ID}/collections/sync_state`;
 const GMAIL_EXCLUDE = "-in:spam -in:trash -in:drafts -category:promotions -category:social";
 const BATCH_SIZE = 50;
-const MAX_BATCHES_PER_JOB = 6; // 6 batches × 50 = 300 msgs, ~1000 units/batch → 6000 units/min (Gmail limit)
+const MAX_BATCHES_PER_JOB = 6;
 const JOB_TIMEOUT_MS = 4 * 60 * 1000;
 
 let runtimeUrl = "";
@@ -141,19 +144,23 @@ async function syncAccount(payload: any, caller: any) {
 // ─── List Fetch ─────────────────────────────────────────────────────────────
 
 async function listFetch(account: any, token: string): Promise<number> {
-  if (account.provider !== "gmail") throw new Error(`unsupported: ${account.provider}`);
+  const provider = account.provider;
+  if (!PROVIDERS[provider]) throw new Error(`unsupported: ${provider}`);
 
   let newIds: string[];
   let newCursor: string;
 
-  if (!account.cursor) {
-    const result = await fullListFetch(account, token);
-    newIds = result.newIds;
-    newCursor = result.cursor;
+  if (provider === "gmail") {
+    if (!account.cursor) {
+      const r = await gmailFullList(account, token);
+      newIds = r.newIds; newCursor = r.cursor;
+    } else {
+      const r = await gmailIncrementalList(account, token);
+      newIds = r.newIds; newCursor = r.cursor;
+    }
   } else {
-    const result = await incrementalListFetch(account, token);
-    newIds = result.newIds;
-    newCursor = result.cursor;
+    const r = await outlookDeltaList(account, token);
+    newIds = r.newIds; newCursor = r.cursor;
   }
 
   if (newIds.length > 0) {
@@ -189,12 +196,14 @@ async function filterNewIds(userId: string, provider: string, candidateIds: stri
   return candidateIds.filter((id) => !existingSet.has(id));
 }
 
-async function fullListFetch(account: any, token: string): Promise<{ newIds: string[]; cursor: string }> {
+// ─── Gmail list fetch ───────────────────────────────────────────────────────
+
+async function gmailFullList(account: any, token: string): Promise<{ newIds: string[]; cursor: string }> {
   const allIds: string[] = [];
   let pageToken: string | undefined;
 
   do {
-    const result = await api("POST", `${GMAIL}/list_emails`, token, {
+    const result = await api("POST", `${PROVIDERS.gmail}/list_emails`, token, {
       query: GMAIL_EXCLUDE,
       maxResults: 500,
       ...(pageToken ? { pageToken } : {}),
@@ -206,7 +215,7 @@ async function fullListFetch(account: any, token: string): Promise<{ newIds: str
 
   let cursor = "";
   if (allIds.length > 0) {
-    const first = await api("POST", `${GMAIL}/get_email`, token, { messageId: allIds[0] });
+    const first = await api("POST", `${PROVIDERS.gmail}/get_email`, token, { messageId: allIds[0] });
     cursor = first.historyId ?? "";
   }
 
@@ -214,14 +223,14 @@ async function fullListFetch(account: any, token: string): Promise<{ newIds: str
   return { newIds, cursor };
 }
 
-async function incrementalListFetch(account: any, token: string): Promise<{ newIds: string[]; cursor: string }> {
+async function gmailIncrementalList(account: any, token: string): Promise<{ newIds: string[]; cursor: string }> {
   const added: string[] = [];
   let pageToken: string | undefined;
   let latestHistoryId: string | null = null;
 
   try {
     do {
-      const result = await api("POST", `${GMAIL}/history_list`, token, {
+      const result = await api("POST", `${PROVIDERS.gmail}/history_list`, token, {
         startHistoryId: account.cursor,
         maxResults: 500,
         ...(pageToken ? { pageToken } : {}),
@@ -233,13 +242,46 @@ async function incrementalListFetch(account: any, token: string): Promise<{ newI
   } catch (e: any) {
     if (e.message?.includes("404")) {
       log.warn(`historyId expired for ${account.user_id}, full resync`);
-      return fullListFetch({ ...account, cursor: null }, token);
+      return gmailFullList({ ...account, cursor: null }, token);
     }
     throw e;
   }
 
   const newIds = await filterNewIds(account.user_id, account.provider, added);
   return { newIds, cursor: latestHistoryId ?? account.cursor };
+}
+
+// ─── Outlook delta list ─────────────────────────────────────────────────────
+
+async function outlookDeltaList(account: any, token: string): Promise<{ newIds: string[]; cursor: string }> {
+  const allAdded: string[] = [];
+  let nextLink: string | null = null;
+  let deltaLink: string | null = null;
+
+  // First page: use stored cursor (deltaLink) or start fresh
+  const input: any = account.cursor ? { deltaLink: account.cursor } : { folder: "Inbox", top: 200 };
+
+  do {
+    const result = await api("POST", `${PROVIDERS.outlook}/delta_list`, token, nextLink ? { deltaLink: nextLink } : input);
+    for (const id of result.messagesAdded ?? []) allAdded.push(id);
+    nextLink = result.nextLink ?? null;
+    deltaLink = result.deltaLink ?? deltaLink;
+  } while (nextLink);
+
+  // Also sync SentItems on first sync (no cursor yet)
+  if (!account.cursor) {
+    let sentNext: string | null = null;
+    const sentInput = { folder: "SentItems", top: 200 };
+    do {
+      const result = await api("POST", `${PROVIDERS.outlook}/delta_list`, token, sentNext ? { deltaLink: sentNext } : sentInput);
+      for (const id of result.messagesAdded ?? []) allAdded.push(id);
+      sentNext = result.nextLink ?? null;
+      // We only keep the Inbox deltaLink as cursor (SentItems tracked separately if needed later)
+    } while (sentNext);
+  }
+
+  const newIds = await filterNewIds(account.user_id, account.provider, allAdded);
+  return { newIds, cursor: deltaLink ?? account.cursor ?? "" };
 }
 
 // ─── Import Batch (bulk SQL) ────────────────────────────────────────────────
@@ -261,7 +303,9 @@ async function importBatch(userId: string, provider: string, token: string): Pro
 
   const messageIds = queueItems.map((r: any) => r.external_id);
 
-  const { messages } = await api("POST", `${GMAIL}/batch_get_emails`, token, { messageIds });
+  const endpoint = PROVIDERS[provider];
+  if (!endpoint) throw new Error(`unsupported provider: ${provider}`);
+  const { messages } = await api("POST", `${endpoint}/batch_get_emails`, token, { messageIds });
   if (!messages?.length) return 0;
 
   await db.begin(async (tx: any) => {
