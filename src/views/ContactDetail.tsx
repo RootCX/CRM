@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppRecord, useAppCollection, useIntegration, useRuntimeClient } from "@rootcx/sdk";
 import {
@@ -22,7 +22,7 @@ import { EntityFormDialog } from "@/components/EntityFormDialog";
 import type { ExtendedFieldDefinition } from "@/components/EntityFormDialog";
 import { ENTITY_CONFIGS } from "@/components/EntityTypeahead";
 import { APP_ID, STATUS_MAP, STAGE_STYLES, CURRENCY_SYMBOLS } from "@/lib/constants";
-import type { Contact, Company, Deal, StoredEmail } from "@/lib/types";
+import type { Contact, Company, Deal, StoredEmail, EmailParticipant } from "@/lib/types";
 
 function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: string; value?: string | null; href?: string }) {
   if (!value) return null;
@@ -39,44 +39,73 @@ function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: s
   );
 }
 
-function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
-  const { connected, loading: integLoading, connect } = useIntegration(APP_ID, "gmail");
-  const { data: storedEmails, loading: dbLoading, refetch } = useAppCollection<StoredEmail>(APP_ID, "contact_emails");
+function htmlToText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const walk = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    const el = node as Element;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "style" || tag === "script" || tag === "head") return "";
+    if (tag === "br") return "\n";
+    const children = Array.from(el.childNodes).map(walk).join("");
+    const block = ["div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "blockquote", "section", "article", "header", "footer", "table"];
+    if (block.includes(tag)) return "\n" + children + "\n";
+    if (tag === "a") {
+      const href = el.getAttribute("href");
+      if (href && !href.startsWith("mailto:") && children.trim() !== href) return `${children.trim()} (${href})`;
+    }
+    return children;
+  };
+  return walk(doc.body).replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").replace(/ /g, " ").trim();
+}
+
+interface EmailWithParticipants extends StoredEmail {
+  participants?: EmailParticipant[];
+}
+
+function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
+  const { connected: gmailConnected, loading: gmailLoading, connect: connectGmail } = useIntegration("gmail");
+  const { connected: outlookConnected, loading: outlookLoading, connect: connectOutlook } = useIntegration("outlook");
   const client = useRuntimeClient();
-  const [syncing, setSyncing] = useState(false);
-  const [selected, setSelected] = useState<StoredEmail | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [syncInfo, setSyncInfo] = useState<{ synced: number; total: number } | null>(null);
+  const [emails, setEmails] = useState<EmailWithParticipants[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<EmailWithParticipants | null>(null);
 
-  const emails = storedEmails
-    .filter(e => e.contact_id === contactId)
-    .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
+  const connected = gmailConnected || outlookConnected;
+  const integLoading = gmailLoading || outlookLoading;
 
-  const handleSync = async () => {
-    if (!contactEmail || syncing) return;
-    setSyncing(true); setError(null);
+  const fetchEmails = async () => {
+    if (!contactId) return;
+    setLoading(true);
     try {
-      const result = await client.rpc(APP_ID, "sync_emails", { contact_id: contactId, contact_email: contactEmail });
-      await refetch();
-      setSyncInfo({ synced: result.synced, total: result.total });
-      if (result.synced > 0) toast.success(`${result.synced} new email${result.synced > 1 ? "s" : ""} synced`);
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to sync emails");
-      toast.error("Email sync failed");
-    } finally { setSyncing(false); }
+      const result = await client.rpc(APP_ID, "get_contact_emails", { contact_id: contactId, limit: 100 }) as any;
+      setEmails(result?.emails ?? []);
+    } catch { setEmails([]); }
+    finally { setLoading(false); }
   };
 
-  if (integLoading || dbLoading) return <LoadingState variant="spinner" />;
+  useEffect(() => { fetchEmails(); }, [contactId]);
+
+  const fromParticipant = (email: EmailWithParticipants) =>
+    email.participants?.find((p) => p.role === "from");
+  const toParticipants = (email: EmailWithParticipants) =>
+    email.participants?.filter((p) => p.role === "to").map((p) => p.name || p.address).join(", ") ?? "";
+
+  if (integLoading || loading) return <LoadingState variant="spinner" />;
   if (!connected) return (
     <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
         <IconPlugConnected className="h-6 w-6 text-muted-foreground" />
       </div>
       <div>
-        <p className="font-medium">Connect Gmail</p>
-        <p className="text-sm text-muted-foreground mt-1">Connect your Gmail account to see email history.</p>
+        <p className="font-medium">Connect Email</p>
+        <p className="text-sm text-muted-foreground mt-1">Connect your email account to see email history.</p>
       </div>
-      <Button onClick={connect}>Connect Gmail</Button>
+      <div className="flex gap-2">
+        <Button onClick={connectGmail}>Connect Gmail</Button>
+        <Button variant="outline" onClick={connectOutlook}>Connect Outlook</Button>
+      </div>
     </div>
   );
   if (!contactEmail) return (
@@ -86,22 +115,13 @@ function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail
   return (
     <div className="flex flex-col h-full gap-3">
       <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-sm text-muted-foreground">Emails with <span className="font-medium text-foreground">{contactEmail}</span></p>
-          {syncInfo && <p className="text-xs text-muted-foreground">{syncInfo.total} in DB{syncInfo.synced > 0 && <span className="text-emerald-600 ml-1">· +{syncInfo.synced} new</span>}</p>}
-        </div>
-        <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-          <IconRefresh className={cn("h-4 w-4 mr-1.5", syncing && "animate-spin")} />
-          {syncing ? "Syncing…" : "Refresh"}
+        <p className="text-sm text-muted-foreground">Emails with <span className="font-medium text-foreground">{contactEmail}</span></p>
+        <Button variant="outline" size="sm" onClick={fetchEmails}>
+          <IconRefresh className="h-4 w-4 mr-1.5" />
+          Refresh
         </Button>
       </div>
-      {error && (
-        <div className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          <IconAlertCircle className="h-4 w-4 shrink-0" />{error}
-        </div>
-      )}
-      {syncing && emails.length === 0 && <LoadingState variant="skeleton" />}
-      {!syncing && emails.length === 0 && <EmptyState icon={<IconMail className="h-8 w-8" />} title="No emails found" description={`No emails exchanged with ${contactEmail}`} />}
+      {emails.length === 0 && <EmptyState icon={<IconMail className="h-8 w-8" />} title="No emails yet" description="Emails will appear here once the background sync completes." />}
       {emails.length > 0 && (
         selected ? (
           <div className="flex flex-col gap-3">
@@ -110,12 +130,21 @@ function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">{selected.subject || "(no subject)"}</CardTitle>
                 <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                  <span>From: {selected.from}</span><span>To: {selected.to}</span>
-                  <span>{selected.date && new Date(selected.date).toLocaleString()}</span>
+                  <span>From: {fromParticipant(selected)?.name || fromParticipant(selected)?.address}</span>
+                  <span>To: {toParticipants(selected)}</span>
+                  <span>{selected.received_at && new Date(selected.received_at).toLocaleString()}</span>
                 </div>
               </CardHeader>
               <Separator />
-              <CardContent className="pt-4"><p className="text-sm whitespace-pre-wrap">{selected.body || selected.snippet}</p></CardContent>
+              <CardContent className="pt-4">
+                {selected.body ? (
+                  <div className="text-sm whitespace-pre-line break-words leading-relaxed">
+                    {htmlToText(selected.body)}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">(body loading…)</p>
+                )}
+              </CardContent>
             </Card>
           </div>
         ) : (
@@ -125,10 +154,9 @@ function GmailTab({ contactId, contactEmail }: { contactId: string; contactEmail
                 <button key={email.id} onClick={() => setSelected(email)} className="flex flex-col gap-1 p-3 text-left hover:bg-muted/50 transition-colors">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium truncate">{email.subject || "(no subject)"}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{email.date && new Date(email.date).toLocaleDateString()}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{email.received_at && new Date(email.received_at).toLocaleDateString()}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground truncate">{email.from}</span>
-                  <span className="text-xs text-muted-foreground line-clamp-2">{email.snippet}</span>
+                  <span className="text-xs text-muted-foreground truncate">{fromParticipant(email)?.name || fromParticipant(email)?.address}</span>
                 </button>
               ))}
             </div>
@@ -181,7 +209,7 @@ export default function ContactDetail() {
   const navigate = useNavigate();
   const { data: contact, loading, error, update, remove } = useAppRecord<Contact>(APP_ID, "contacts", contactId!);
   const { data: companies } = useAppCollection<Company>(APP_ID, "companies");
-  const { data: activities } = useAppCollection<typeof APP_ID, any>(APP_ID, "activities");
+  const { data: activities } = useAppCollection<any>(APP_ID, "activities");
   const { isFavorite, toggle: toggleFav } = useFavorites();
   const [editOpen, setEditOpen]     = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -297,7 +325,7 @@ export default function ContactDetail() {
             <TabsContent value="notes"      className="flex-1 overflow-hidden mt-4"><NotesTab filterKey="contact_id" filterId={contactId!} /></TabsContent>
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="contact_id" filterId={contactId!} /></TabsContent>
             <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><DealsTab contactId={contactId!} /></TabsContent>
-            <TabsContent value="emails"     className="flex-1 overflow-hidden mt-4"><GmailTab contactId={contactId!} contactEmail={contact.email} /></TabsContent>
+            <TabsContent value="emails"     className="flex-1 overflow-hidden mt-4"><EmailsTab contactId={contactId!} contactEmail={contact.email} /></TabsContent>
           </Tabs>
         </div>
       </div>

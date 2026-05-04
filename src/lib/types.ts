@@ -83,15 +83,21 @@ export interface Activity {
 
 export interface StoredEmail {
   id: string;
-  gmail_id: string;
-  contact_id: string;
+  header_message_id?: string;
+  thread_id?: string;
   subject?: string;
-  from?: string;
-  to?: string;
-  date?: string;
-  snippet?: string;
   body?: string;
+  received_at?: string;
   created_at: string;
+}
+
+export interface EmailParticipant {
+  id: string;
+  email_id: string;
+  address: string;
+  name?: string;
+  role: "from" | "to" | "cc" | "bcc";
+  contact_id?: string;
 }
 
 export interface List {

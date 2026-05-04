@@ -71,16 +71,46 @@
       ]
     },
     {
-      "entityName": "contact_emails",
+      "entityName": "emails",
       "fields": [
-        { "name": "contact_id", "type": "entity_link", "onDelete": "cascade", "references": { "entity": "contacts", "field": "id" }, "required": true },
-        { "name": "gmail_id",   "type": "text", "required": true },
-        { "name": "subject",    "type": "text" },
-        { "name": "from",       "type": "text" },
-        { "name": "to",         "type": "text" },
-        { "name": "date",       "type": "timestamp" },
-        { "name": "snippet",    "type": "text" },
-        { "name": "body",       "type": "text" }
+        { "name": "header_message_id", "type": "text", "unique": true },
+        { "name": "thread_id",         "type": "text" },
+        { "name": "subject",           "type": "text" },
+        { "name": "body",              "type": "text" },
+        { "name": "received_at",       "type": "timestamp" }
+      ]
+    },
+    {
+      "entityName": "email_channel_associations",
+      "fields": [
+        { "name": "email_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "emails", "field": "id" }, "required": true },
+        { "name": "user_id",     "type": "text", "required": true },
+        { "name": "provider",    "type": "text", "required": true, "enum_values": ["gmail", "outlook"] },
+        { "name": "external_id", "type": "text", "required": true },
+        { "name": "direction",   "type": "text", "enum_values": ["incoming", "outgoing"] }
+      ]
+    },
+    {
+      "entityName": "email_participants",
+      "fields": [
+        { "name": "email_id",   "type": "entity_link", "onDelete": "cascade", "references": { "entity": "emails", "field": "id" }, "required": true },
+        { "name": "address",    "type": "text", "required": true },
+        { "name": "name",       "type": "text" },
+        { "name": "role",       "type": "text", "required": true, "enum_values": ["from", "to", "cc", "bcc"] },
+        { "name": "contact_id", "type": "entity_link", "onDelete": "set_null", "references": { "entity": "contacts", "field": "id" } }
+      ]
+    },
+    {
+      "entityName": "sync_state",
+      "fields": [
+        { "name": "user_id",        "type": "text", "required": true },
+        { "name": "provider",       "type": "text", "required": true, "enum_values": ["gmail", "outlook"] },
+        { "name": "cursor",         "type": "text" },
+        { "name": "status",         "type": "text", "enum_values": ["idle", "syncing", "failed"] },
+        { "name": "sync_stage",     "type": "text", "enum_values": ["list_fetch", "messages_import"] },
+        { "name": "last_synced_at", "type": "timestamp" },
+        { "name": "error_count",    "type": "number" },
+        { "name": "enabled",        "type": "boolean" }
       ]
     },
     {
@@ -129,6 +159,15 @@
       ]
     },
     {
+      "entityName": "email_import_queue",
+      "fields": [
+        { "name": "user_id",     "type": "text", "required": true },
+        { "name": "provider",    "type": "text", "required": true },
+        { "name": "external_id", "type": "text", "required": true },
+        { "name": "created_at",  "type": "timestamp" }
+      ]
+    },
+    {
       "entityName": "favorites",
       "fields": [
         { "name": "entity_type", "type": "text", "required": true, "enum_values": ["contact", "company", "deal"] },
@@ -152,8 +191,6 @@
       { "key": "notes.write",         "description": "Create and edit notes" },
       { "key": "activities.read",     "description": "View activities" },
       { "key": "activities.write",    "description": "Create and edit activities" },
-      { "key": "contact_emails.read", "description": "View cached contact emails" },
-      { "key": "contact_emails.write","description": "Store cached contact emails" },
       { "key": "lists.read",           "description": "View lists" },
       { "key": "lists.write",          "description": "Create and manage lists" },
       { "key": "list_records.read",    "description": "View list records" },
@@ -161,7 +198,24 @@
       { "key": "attachments.read",    "description": "View attachments" },
       { "key": "attachments.write",   "description": "Upload and manage attachments" },
       { "key": "favorites.read",      "description": "View favorites" },
-      { "key": "favorites.write",     "description": "Manage favorites" }
+      { "key": "favorites.write",     "description": "Manage favorites" },
+      { "key": "emails.read",         "description": "View synced emails" },
+      { "key": "emails.write",        "description": "Store synced emails" },
+      { "key": "email_channel_associations.read",  "description": "View email channel associations" },
+      { "key": "email_channel_associations.write", "description": "Manage email channel associations" },
+      { "key": "email_participants.read",  "description": "View email participants" },
+      { "key": "email_participants.write", "description": "Manage email participants" },
+      { "key": "sync_state.read",     "description": "View sync state" },
+      { "key": "sync_state.write",    "description": "Manage sync state" },
+      { "key": "email_import_queue.read",  "description": "View email import queue" },
+      { "key": "email_import_queue.write", "description": "Manage email import queue" }
     ]
-  }
+  },
+  "crons": [
+    {
+      "name": "sync_emails",
+      "schedule": "*/5 * * * *",
+      "overlapPolicy": "skip"
+    }
+  ]
 }
