@@ -22,6 +22,7 @@ serve({
   rpc: {
     trigger_sync: (_p: any, caller: any) => dispatchSync(caller),
     get_contact_emails: (p: any, caller: any) => getContactEmails(p, caller),
+    send_email: (p: any, caller: any) => sendEmail(p, caller),
     add_filtered_to_list: (p: any, caller: any) => addFilteredToList(p, caller),
   },
   onJob: handleJob,
@@ -438,6 +439,19 @@ async function getContactEmails(params: { contact_id: string; limit?: number; of
     emails: emails.map((e: any) => ({ ...e, participants: partsByEmail.get(e.id) ?? [] })),
     total: emails.length,
   };
+}
+
+// ─── Send email (RPC) ───────────────────────────────────────────────────────
+
+async function sendEmail(params: { provider: string; to: string; subject: string; body: string; cc?: string }, caller: any) {
+  const token: string = caller?.authToken;
+  if (!token) throw new Error("Not authenticated");
+
+  const { provider, to, subject, body, cc } = params;
+  const endpoint = PROVIDERS[provider];
+  if (!endpoint) throw new Error(`unsupported provider: ${provider}`);
+
+  return api("POST", `${endpoint}/send_email`, token, { to, subject, body, cc });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

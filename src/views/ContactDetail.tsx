@@ -3,14 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAppRecord, useAppCollection, useIntegration, useRuntimeClient } from "@rootcx/sdk";
 import {
   PageHeader, Tabs, TabsList, TabsTrigger, TabsContent,
-  Card, CardContent, CardHeader, CardTitle,
   Badge, StatusBadge, Button, Separator,
   ConfirmDialog, LoadingState, ErrorState, EmptyState,
   ScrollArea, toast,
 } from "@rootcx/ui";
 import {
   IconEdit, IconTrash, IconMail, IconPhone, IconBriefcase, IconBuilding,
-  IconNotes, IconRefresh, IconAlertCircle, IconPlugConnected, IconMapPin,
+  IconNotes, IconRefresh, IconPlugConnected, IconMapPin,
   IconBrandLinkedin, IconBrandTwitter, IconStar, IconStarFilled,
   IconChecklist, IconCurrencyDollar, IconUser,
 } from "@tabler/icons-react";
@@ -39,29 +38,23 @@ function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: s
   );
 }
 
-function htmlToText(html: string): string {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  const walk = (node: Node): string => {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
-    if (node.nodeType !== Node.ELEMENT_NODE) return "";
-    const el = node as Element;
-    const tag = el.tagName.toLowerCase();
-    if (tag === "style" || tag === "script" || tag === "head") return "";
-    if (tag === "br") return "\n";
-    const children = Array.from(el.childNodes).map(walk).join("");
-    const block = ["div", "p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "blockquote", "section", "article", "header", "footer", "table"];
-    if (block.includes(tag)) return "\n" + children + "\n";
-    if (tag === "a") {
-      const href = el.getAttribute("href");
-      if (href && !href.startsWith("mailto:") && children.trim() !== href) return `${children.trim()} (${href})`;
-    }
-    return children;
-  };
-  return walk(doc.body).replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").replace(/ /g, " ").trim();
-}
 
 interface EmailWithParticipants extends StoredEmail {
   participants?: EmailParticipant[];
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "now";
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h`;
+  const diffDays = Math.floor(diffHr / 24);
+  if (diffDays < 7) return `${diffDays}d`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
@@ -70,10 +63,12 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
   const client = useRuntimeClient();
   const [emails, setEmails] = useState<EmailWithParticipants[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<EmailWithParticipants | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<EmailWithParticipants | "new" | null>(null);
 
   const connected = gmailConnected || outlookConnected;
   const integLoading = gmailLoading || outlookLoading;
+  const provider = outlookConnected ? "outlook" : "gmail";
 
   const fetchEmails = async () => {
     if (!contactId) return;
@@ -89,8 +84,12 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
 
   const fromParticipant = (email: EmailWithParticipants) =>
     email.participants?.find((p) => p.role === "from");
-  const toParticipants = (email: EmailWithParticipants) =>
-    email.participants?.filter((p) => p.role === "to").map((p) => p.name || p.address).join(", ") ?? "";
+
+  const handleSend = async (to: string, subject: string, body: string) => {
+    await client.rpc(APP_ID, "send_email", { provider, to, subject, body });
+    toast.success("Email sent");
+    setReplyTo(null);
+  };
 
   if (integLoading || loading) return <LoadingState variant="spinner" />;
   if (!connected) return (
@@ -112,60 +111,155 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
     <EmptyState icon={<IconMail className="h-8 w-8" />} title="No email address" description="Add an email address to this contact to see their email history." />
   );
 
+  if (replyTo) {
+    const isReply = replyTo !== "new";
+    return (
+      <ComposeEmail
+        to={isReply ? (fromParticipant(replyTo as EmailWithParticipants)?.address ?? contactEmail) : contactEmail}
+        subject={isReply ? `Re: ${(replyTo as EmailWithParticipants).subject?.replace(/^Re:\s*/i, "")}` : ""}
+        onSend={handleSend}
+        onCancel={() => setReplyTo(null)}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col h-full gap-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Emails with <span className="font-medium text-foreground">{contactEmail}</span></p>
-        <Button variant="outline" size="sm" onClick={fetchEmails}>
-          <IconRefresh className="h-4 w-4 mr-1.5" />
-          Refresh
-        </Button>
+        <p className="text-sm text-muted-foreground">{emails.length} email{emails.length !== 1 ? "s" : ""}</p>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setReplyTo("new")}>
+            <IconMail className="h-4 w-4 mr-1.5" /> Compose
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchEmails}>
+            <IconRefresh className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
       {emails.length === 0 && <EmptyState icon={<IconMail className="h-8 w-8" />} title="No emails yet" description="Emails will appear here once the background sync completes." />}
-      {emails.length > 0 && (
-        selected ? (
-          <div className="flex flex-col gap-3">
-            <button onClick={() => setSelected(null)} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground w-fit">← Back to list</button>
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">{selected.subject || "(no subject)"}</CardTitle>
-                <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                  <span>From: {fromParticipant(selected)?.name || fromParticipant(selected)?.address}</span>
-                  <span>To: {toParticipants(selected)}</span>
-                  <span>{selected.received_at && new Date(selected.received_at).toLocaleString()}</span>
-                </div>
-              </CardHeader>
-              <Separator />
-              <CardContent className="pt-4">
-                {selected.body ? (
-                  <div className="text-sm whitespace-pre-line break-words leading-relaxed">
-                    {htmlToText(selected.body)}
+
+      <ScrollArea className="flex-1">
+        <div className="flex flex-col">
+          {emails.map((email) => {
+            const from = fromParticipant(email);
+            const isExpanded = expandedId === email.id;
+            const senderName = from?.name || from?.address || "Unknown";
+            const initial = senderName[0]?.toUpperCase() ?? "?";
+
+            return (
+              <div key={email.id} className="border-b last:border-b-0">
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : email.id)}
+                  className={cn(
+                    "w-full flex items-start gap-3 p-3 text-left transition-colors hover:bg-muted/50",
+                    isExpanded && "bg-muted/30"
+                  )}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-medium">
+                    {initial}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">(body loading…)</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        ) : (
-          <ScrollArea className="flex-1">
-            <div className="flex flex-col divide-y">
-              {emails.map(email => (
-                <button key={email.id} onClick={() => setSelected(email)} className="flex flex-col gap-1 p-3 text-left hover:bg-muted/50 transition-colors">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium truncate">{email.subject || "(no subject)"}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{email.received_at && new Date(email.received_at).toLocaleDateString()}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium truncate">{senderName}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {email.received_at && formatRelativeDate(email.received_at)}
+                      </span>
+                    </div>
+                    <p className="text-sm truncate">{email.subject || "(no subject)"}</p>
+                    {!isExpanded && (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {email.body?.slice(0, 120)}
+                      </p>
+                    )}
                   </div>
-                  <span className="text-xs text-muted-foreground truncate">{fromParticipant(email)?.name || fromParticipant(email)?.address}</span>
                 </button>
-              ))}
-            </div>
-          </ScrollArea>
-        )
-      )}
+
+                {isExpanded && (
+                  <div className="px-3 pb-3 pl-14">
+                    <div className="flex flex-col gap-0.5 text-xs text-muted-foreground mb-3">
+                      <span>From: {from?.name ? `${from.name} <${from.address}>` : from?.address}</span>
+                      <span>To: {email.participants?.filter((p) => p.role === "to").map((p) => p.name || p.address).join(", ")}</span>
+                      {email.participants?.some((p) => p.role === "cc") && (
+                        <span>Cc: {email.participants.filter((p) => p.role === "cc").map((p) => p.name || p.address).join(", ")}</span>
+                      )}
+                      <span>{email.received_at && new Date(email.received_at).toLocaleString()}</span>
+                    </div>
+                    <div className="text-sm whitespace-pre-line break-words leading-relaxed">
+                      {email.body || "(no content)"}
+                    </div>
+                    <div className="mt-3 pt-3 border-t">
+                      <Button variant="outline" size="sm" onClick={() => setReplyTo(email)}>
+                        Reply
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
+
+function ComposeEmail({ to, subject: initSubject, onSend, onCancel }: {
+  to: string;
+  subject: string;
+  onSend: (to: string, subject: string, body: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [subject, setSubject] = useState(initSubject);
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!body.trim()) return;
+    setSending(true);
+    try { await onSend(to, subject, body); }
+    catch (err: any) { toast.error(err?.message ?? "Failed to send"); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium">New message</h3>
+        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
+      </div>
+      <form onSubmit={handleSubmit} className="flex flex-col flex-1 gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground w-12">To:</span>
+          <span className="font-medium">{to}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground w-12">Subject:</span>
+          <input
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            className="flex-1 text-sm bg-transparent border-b border-border/50 focus:border-primary outline-none py-1"
+            placeholder="Subject"
+          />
+        </div>
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          className="flex-1 text-sm bg-transparent border rounded-md p-3 resize-none outline-none focus:ring-1 focus:ring-primary"
+          placeholder="Write your message..."
+          autoFocus
+        />
+        <div className="flex justify-end">
+          <Button type="submit" disabled={sending || !body.trim()}>
+            {sending ? "Sending..." : "Send"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 
 function DealsTab({ contactId }: { contactId: string }) {
   const navigate = useNavigate();
