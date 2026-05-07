@@ -60,15 +60,18 @@ function formatRelativeDate(dateStr: string): string {
 function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
   const { connected: gmailConnected, loading: gmailLoading, connect: connectGmail } = useIntegration("gmail");
   const { connected: outlookConnected, loading: outlookLoading, connect: connectOutlook } = useIntegration("outlook");
+  const { connected: imapConnected, loading: imapLoading, connect: connectImap, submitCredentials: submitImapCreds } = useIntegration("imap_smtp");
   const client = useRuntimeClient();
   const [emails, setEmails] = useState<EmailWithParticipants[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [replyTo, setReplyTo] = useState<EmailWithParticipants | "new" | null>(null);
+  const [imapForm, setImapForm] = useState<any>(null);
+  const [imapValues, setImapValues] = useState<Record<string, string>>({});
 
-  const connected = gmailConnected || outlookConnected;
-  const integLoading = gmailLoading || outlookLoading;
-  const provider = outlookConnected ? "outlook" : "gmail";
+  const connected = gmailConnected || outlookConnected || imapConnected;
+  const integLoading = gmailLoading || outlookLoading || imapLoading;
+  const provider = outlookConnected ? "outlook" : imapConnected ? "imap_smtp" : "gmail";
 
   const fetchEmails = async () => {
     if (!contactId) return;
@@ -92,19 +95,65 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
   };
 
   if (integLoading || loading) return <LoadingState variant="spinner" />;
+  const handleConnectImap = async () => {
+    const result = await connectImap();
+    if (result?.type === "credentials" && result.schema) {
+      const defaults: Record<string, string> = {};
+      for (const [key, def] of Object.entries((result.schema as any).properties ?? {})) {
+        if ((def as any).default != null) defaults[key] = String((def as any).default);
+      }
+      setImapValues(defaults);
+      setImapForm(result.schema);
+    }
+  };
+
+  const handleSubmitImap = async () => {
+    try {
+      await submitImapCreds(imapValues);
+      setImapForm(null);
+      setImapValues({});
+    } catch (e: any) {
+      toast.error(e?.message ?? "Connection failed");
+    }
+  };
+
   if (!connected) return (
     <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
         <IconPlugConnected className="h-6 w-6 text-muted-foreground" />
       </div>
-      <div>
-        <p className="font-medium">Connect Email</p>
-        <p className="text-sm text-muted-foreground mt-1">Connect your email account to see email history.</p>
-      </div>
-      <div className="flex gap-2">
-        <Button onClick={connectGmail}>Connect Gmail</Button>
-        <Button variant="outline" onClick={connectOutlook}>Connect Outlook</Button>
-      </div>
+      {!imapForm ? (
+        <>
+          <div>
+            <p className="font-medium">Connect Email</p>
+            <p className="text-sm text-muted-foreground mt-1">Connect your email account to see email history.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={connectGmail}>Connect Gmail</Button>
+            <Button variant="outline" onClick={connectOutlook}>Connect Outlook</Button>
+            <Button variant="outline" onClick={handleConnectImap}>Connect IMAP</Button>
+          </div>
+        </>
+      ) : (
+        <div className="w-full max-w-sm text-left space-y-3">
+          {Object.entries((imapForm.properties ?? {}) as Record<string, any>).map(([key, def]) => (
+            <div key={key} className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">{def.label || key}</label>
+              <input
+                type={def.secret || /password/i.test(key) ? "password" : "text"}
+                placeholder={def.placeholder || ""}
+                value={imapValues[key] ?? ""}
+                onChange={(e) => setImapValues((v) => ({ ...v, [key]: e.target.value }))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          ))}
+          <div className="flex gap-2 pt-1">
+            <Button onClick={handleSubmitImap}>Connect</Button>
+            <Button variant="outline" onClick={() => setImapForm(null)}>Cancel</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
   if (!contactEmail) return (

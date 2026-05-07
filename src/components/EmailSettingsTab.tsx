@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useAuth, useIntegration, useAppCollection, useRuntimeClient } from "@rootcx/sdk";
-import { Button, Card, CardContent, CardHeader, CardTitle, Badge, toast } from "@rootcx/ui";
-import { IconBrandGmail, IconBrandWindows, IconCheck, IconX, IconRefresh } from "@tabler/icons-react";
+import { Button, Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Separator, toast, ConfirmDialog, Input, Label } from "@rootcx/ui";
+import { IconBrandGmail, IconBrandWindows, IconMail, IconCheck, IconX, IconRefresh, IconTrash, IconLoader2 } from "@tabler/icons-react";
 import { APP_ID } from "@/lib/constants";
 
 interface SyncState {
@@ -21,12 +21,38 @@ export default function EmailSettingsTab() {
   const client = useRuntimeClient();
   const { connected: gmailConnected, loading: gmailLoading, connect: connectGmail, disconnect: disconnectGmail } = useIntegration("gmail");
   const { connected: outlookConnected, loading: outlookLoading, connect: connectOutlook, disconnect: disconnectOutlook } = useIntegration("outlook");
+  const { connected: imapConnected, loading: imapLoading, connect: connectImap, submitCredentials: submitImapCredentials, disconnect: disconnectImap } = useIntegration("imap_smtp");
   const { data: syncStates, loading: syncLoading, refetch } = useAppCollection<SyncState>(APP_ID, "sync_state");
+
+  const { total: emailCount } = useAppCollection<{ id: string }>(APP_ID, "emails", { limit: 1 });
+  const { total: queueCount } = useAppCollection<{ id: string }>(APP_ID, "email_import_queue", { limit: 1 });
+
+  const [flushConfirmOpen, setFlushConfirmOpen] = useState(false);
+  const [flushing, setFlushing] = useState(false);
+
+  const runFlush = async () => {
+    setFlushing(true);
+    try {
+      const res = await client.rpc(APP_ID, "flush_email_data", {}) as { deleted: { emails: number; queue: number; sync_state: number } };
+      const { emails, queue, sync_state } = res.deleted;
+      await refetch();
+      toast.success(`Flushed ${emails} emails, ${queue} queued items, ${sync_state} sync states.`);
+    } catch (e: any) {
+      toast.error("Flush failed: " + (e?.message ?? "Unknown error"));
+    } finally {
+      setFlushing(false);
+    }
+  };
+
+  const hasEmailData = emailCount > 0 || queueCount > 0 || syncStates.length > 0;
 
   const userId = user?.id;
   const gmailSync = syncStates.find((s) => s.user_id === userId && s.provider === "gmail");
   const outlookSync = syncStates.find((s) => s.user_id === userId && s.provider === "outlook");
+  const imapSync = syncStates.find((s) => s.user_id === userId && s.provider === "imap_smtp");
   const creatingRef = useRef(false);
+  const [imapForm, setImapForm] = useState<Record<string, any> | null>(null);
+  const [imapFormValues, setImapFormValues] = useState<Record<string, string>>({});
 
   const ensureSyncState = async (provider: string) => {
     if (!userId || creatingRef.current) return;
@@ -64,6 +90,30 @@ export default function EmailSettingsTab() {
     await waitForConnection("outlook");
   };
 
+  const handleConnectImap = async () => {
+    const result = await connectImap();
+    if (result?.type === "credentials" && result.schema) {
+      const defaults: Record<string, string> = {};
+      for (const [key, def] of Object.entries((result.schema as any).properties ?? {})) {
+        if ((def as any).default != null) defaults[key] = String((def as any).default);
+      }
+      setImapFormValues(defaults);
+      setImapForm(result.schema as Record<string, any>);
+    }
+  };
+
+  const handleSubmitImap = async () => {
+    try {
+      await submitImapCredentials(imapFormValues);
+      setImapForm(null);
+      setImapFormValues({});
+      await ensureSyncState("imap_smtp");
+      toast.success("IMAP/SMTP connected and sync enabled");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Connection failed");
+    }
+  };
+
   const waitForConnection = async (provider: string) => {
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -79,11 +129,12 @@ export default function EmailSettingsTab() {
   const triggerSyncNow = async () => {
     if (gmailConnected && !gmailSync) await ensureSyncState("gmail");
     if (outlookConnected && !outlookSync) await ensureSyncState("outlook");
+    if (imapConnected && !imapSync) await ensureSyncState("imap_smtp");
     await client.rpc(APP_ID, "trigger_sync", {});
     await refetch();
   };
 
-  if (gmailLoading || outlookLoading || syncLoading) {
+  if (gmailLoading || outlookLoading || imapLoading || syncLoading) {
     return <div className="py-8 text-center text-sm text-muted-foreground">Loading...</div>;
   }
 
@@ -114,22 +165,85 @@ export default function EmailSettingsTab() {
           onDisableSync={() => outlookSync && disableSyncState(outlookSync)}
           onSyncNow={triggerSyncNow}
         />
+        <EmailProviderCard
+          name="IMAP / SMTP"
+          icon={<IconMail className="h-5 w-5" />}
+          description="Any mail server (Gmail app password, Yahoo, Fastmail, self-hosted...)"
+          connected={imapConnected}
+          syncState={imapSync}
+          onConnect={handleConnectImap}
+          onDisconnect={disconnectImap}
+          onDisableSync={() => imapSync && disableSyncState(imapSync)}
+          onSyncNow={triggerSyncNow}
+          credentialsForm={imapForm}
+          formValues={imapFormValues}
+          onFormChange={setImapFormValues}
+          onFormSubmit={handleSubmitImap}
+          onFormCancel={() => setImapForm(null)}
+        />
       </div>
+
+      {hasEmailData && <Separator />}
+
+      {hasEmailData && (
+        <Card className="border-destructive/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-destructive">
+              <IconTrash className="h-4 w-4" />
+              Flush email data
+            </CardTitle>
+            <CardDescription>
+              Delete all synced data and start fresh. This cannot be undone.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-3">
+            <div className="text-sm text-muted-foreground space-y-1">
+              {emailCount > 0 && <p>{emailCount.toLocaleString()} emails (+ associations & participants)</p>}
+              {queueCount > 0 && <p>{queueCount.toLocaleString()} queued imports</p>}
+              {syncStates.length > 0 && <p>{syncStates.length} sync state{syncStates.length > 1 ? "s" : ""}</p>}
+            </div>
+            <Button variant="destructive" className="w-full" onClick={() => setFlushConfirmOpen(true)} disabled={flushing}>
+              {flushing ? (
+                <><IconLoader2 className="h-4 w-4 mr-2 animate-spin" /> Flushing…</>
+              ) : (
+                <><IconTrash className="h-4 w-4 mr-2" /> Flush all email data</>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <ConfirmDialog
+        open={flushConfirmOpen}
+        onOpenChange={setFlushConfirmOpen}
+        title="Flush all email data?"
+        description="This will permanently delete all synced emails, queued imports, and sync state. You'll need to reconnect and re-sync from scratch."
+        confirmLabel="Yes, flush everything"
+        onConfirm={runFlush}
+        destructive
+      />
     </div>
   );
 }
 
 function EmailProviderCard({
-  name, icon, connected, syncState, onConnect, onDisconnect, onDisableSync, onSyncNow,
+  name, icon, description, connected, syncState, onConnect, onDisconnect, onDisableSync, onSyncNow,
+  credentialsForm, formValues, onFormChange, onFormSubmit, onFormCancel,
 }: {
   name: string;
   icon: React.ReactNode;
+  description?: string;
   connected: boolean;
   syncState?: SyncState;
   onConnect: () => void;
   onDisconnect: () => Promise<void>;
   onDisableSync: () => void;
   onSyncNow: () => Promise<void>;
+  credentialsForm?: Record<string, any> | null;
+  formValues?: Record<string, string>;
+  onFormChange?: (values: Record<string, string>) => void;
+  onFormSubmit?: () => void;
+  onFormCancel?: () => void;
 }) {
   const [disconnecting, setDisconnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -162,9 +276,7 @@ function EmailProviderCard({
   const formatLastSync = (dateStr?: string) => {
     if (!dateStr) return "Never";
     const d = new Date(dateStr);
-    const now = new Date();
-    const diffMs = now.getTime() - d.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
+    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
     if (diffMin < 1) return "Just now";
     if (diffMin < 60) return `${diffMin}m ago`;
     const diffHr = Math.floor(diffMin / 60);
@@ -190,9 +302,10 @@ function EmailProviderCard({
             </Badge>
           )}
         </div>
+        {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent>
-        {connected ? (
+        {connected && !credentialsForm ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground space-y-1">
@@ -211,6 +324,24 @@ function EmailProviderCard({
                   {disconnecting ? "..." : "Disconnect"}
                 </Button>
               </div>
+            </div>
+          </div>
+        ) : credentialsForm && formValues && onFormChange ? (
+          <div className="space-y-3">
+            {Object.entries((credentialsForm.properties ?? {}) as Record<string, any>).map(([key, def]) => (
+              <div key={key} className="space-y-1">
+                <Label className="text-xs">{def.label || key}</Label>
+                <Input
+                  type={def.secret || /password/i.test(key) ? "password" : "text"}
+                  placeholder={def.placeholder || ""}
+                  value={formValues[key] ?? ""}
+                  onChange={(e) => onFormChange({ ...formValues, [key]: e.target.value })}
+                />
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Button onClick={onFormSubmit}>Connect</Button>
+              <Button variant="outline" onClick={onFormCancel}>Cancel</Button>
             </div>
           </div>
         ) : (

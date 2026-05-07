@@ -2,6 +2,7 @@ const APP_ID = "crm";
 const PROVIDERS: Record<string, string> = {
   gmail: "/api/v1/integrations/gmail/actions",
   outlook: "/api/v1/integrations/outlook/actions",
+  "imap_smtp": "/api/v1/integrations/imap_smtp/actions",
 };
 const COL_SYNC = `/api/v1/apps/${APP_ID}/collections/sync_state`;
 const GMAIL_EXCLUDE = "-in:spam -in:trash -in:drafts -category:promotions -category:social";
@@ -24,6 +25,7 @@ serve({
     get_contact_emails: (p: any, caller: any) => getContactEmails(p, caller),
     send_email: (p: any, caller: any) => sendEmail(p, caller),
     add_filtered_to_list: (p: any, caller: any) => addFilteredToList(p, caller),
+    flush_email_data: (_p: any, _caller: any) => flushEmailData(),
   },
   onJob: handleJob,
 });
@@ -49,6 +51,19 @@ async function ensureIndexes() {
   await db`CREATE UNIQUE INDEX IF NOT EXISTS idx_assoc_uniq ON crm.email_channel_associations (user_id, provider, external_id)`;
   await db`CREATE UNIQUE INDEX IF NOT EXISTS idx_part_uniq ON crm.email_participants (email_id, address, role)`;
   await db`CREATE INDEX IF NOT EXISTS idx_queue_user_provider ON crm.email_import_queue (user_id, provider, created_at)`;
+}
+
+// ─── Flush all email data ───────────────────────────────────────────────────
+
+async function flushEmailData() {
+  if (!db) throw new Error("database not available");
+  const [[{ count: emails }], [{ count: queue }], [{ count: sync }]] = await Promise.all([
+    db`SELECT COUNT(*)::int AS count FROM crm.emails`,
+    db`SELECT COUNT(*)::int AS count FROM crm.email_import_queue`,
+    db`SELECT COUNT(*)::int AS count FROM crm.sync_state`,
+  ]);
+  await db`TRUNCATE crm.emails, crm.email_channel_associations, crm.email_participants, crm.email_import_queue, crm.sync_state`;
+  return { deleted: { emails, queue, sync_state: sync } };
 }
 
 // ─── Job dispatcher ─────────────────────────────────────────────────────────
@@ -159,9 +174,14 @@ async function listFetch(account: any, token: string): Promise<number> {
       const r = await gmailIncrementalList(account, token);
       newIds = r.newIds; newCursor = r.cursor;
     }
-  } else {
+  } else if (provider === "outlook") {
     const r = await outlookDeltaList(account, token);
     newIds = r.newIds; newCursor = r.cursor;
+  } else if (provider === "imap_smtp") {
+    const r = await imapIncrementalList(account, token);
+    newIds = r.newIds; newCursor = r.cursor;
+  } else {
+    throw new Error(`unsupported provider: ${provider}`);
   }
 
   if (newIds.length > 0) {
@@ -285,9 +305,71 @@ async function outlookDeltaList(account: any, token: string): Promise<{ newIds: 
   return { newIds, cursor: deltaLink ?? account.cursor ?? "" };
 }
 
+// ─── IMAP incremental list ─────────────────────────────────────────────────
+
+async function imapIncrementalList(account: any, token: string): Promise<{ newIds: string[]; cursor: string }> {
+  const cursor: Record<string, { uidValidity: number; highestUid: number }> | null =
+    account.cursor ? JSON.parse(account.cursor) : null;
+
+  // Discover all folders (skip Junk/Trash/Drafts)
+  const foldersResult = await api("POST", `${PROVIDERS["imap_smtp"]}/get_folders`, token, {});
+  const skipUses = new Set(["\\Junk", "\\Trash", "\\Drafts"]);
+  const folders: Array<{ path: string }> = (foldersResult.folders ?? []).filter(
+    (f: any) => !skipUses.has(f.specialUse) && !f.flags?.includes("\\Noselect")
+  );
+
+  const allExternalIds: string[] = [];
+  const newCursors: Record<string, { uidValidity: number; highestUid: number }> = {};
+
+  for (const folder of folders) {
+    const prev = cursor?.[folder.path];
+    const sinceUid = prev?.highestUid ?? undefined;
+    const prevUidValidity = prev?.uidValidity ?? undefined;
+
+    const result = await api("POST", `${PROVIDERS["imap_smtp"]}/list_emails`, token, {
+      folder: folder.path,
+      sinceUid,
+    });
+
+    // Skip if uidValidity matches and no new UIDs
+    if (prevUidValidity && result.uidValidity === prevUidValidity && result.highestUid <= (sinceUid ?? 0)) {
+      newCursors[folder.path] = prev!;
+      continue;
+    }
+
+    let data = result;
+    if (prevUidValidity && result.uidValidity !== prevUidValidity) {
+      log.warn(`IMAP uidValidity changed for ${account.user_id} folder ${folder.path}, full resync`);
+      data = await api("POST", `${PROVIDERS["imap_smtp"]}/list_emails`, token, { folder: folder.path });
+    }
+    for (const uid of data.messageUids ?? []) {
+      allExternalIds.push(encodeImapExternalId(folder.path, uid));
+    }
+    newCursors[folder.path] = { uidValidity: data.uidValidity, highestUid: data.highestUid };
+  }
+
+  // Dedup by chunks to avoid loading all associations in memory
+  const newIds: string[] = [];
+  for (let i = 0; i < allExternalIds.length; i += 200) {
+    const chunk = allExternalIds.slice(i, i + 200);
+    const existing = await db`
+      SELECT external_id FROM crm.email_channel_associations
+      WHERE user_id = ${account.user_id} AND provider = ${account.provider}
+        AND external_id = ANY(${chunk})
+    `;
+    const existingSet = new Set(existing.map((r: any) => r.external_id));
+    for (const id of chunk) {
+      if (!existingSet.has(id)) newIds.push(id);
+    }
+  }
+
+  return { newIds, cursor: JSON.stringify(newCursors) };
+}
+
 // ─── Import Batch (bulk SQL) ────────────────────────────────────────────────
 
 async function importBatch(userId: string, provider: string, token: string): Promise<number> {
+  // Claim items from queue atomically — DELETE returns them, no re-queue risk from concurrent workers
   const queueItems = await db`
     DELETE FROM crm.email_import_queue
     WHERE id IN (
@@ -295,19 +377,41 @@ async function importBatch(userId: string, provider: string, token: string): Pro
       WHERE user_id = ${userId} AND provider = ${provider}
       ORDER BY created_at ASC
       LIMIT ${BATCH_SIZE}
-      FOR UPDATE SKIP LOCKED
     )
-    RETURNING external_id
+    RETURNING id, external_id
   `;
 
   if (queueItems.length === 0) return 0;
 
-  const messageIds = queueItems.map((r: any) => r.external_id);
+  const externalIds: string[] = queueItems.map((r: any) => r.external_id);
+
+  try {
 
   const endpoint = PROVIDERS[provider];
   if (!endpoint) throw new Error(`unsupported provider: ${provider}`);
-  const { messages } = await api("POST", `${endpoint}/batch_get_emails`, token, { messageIds });
-  if (!messages?.length) return 0;
+
+  let messages: any[];
+  if (provider === "imap_smtp") {
+    const byFolder = new Map<string, number[]>();
+    for (const eid of externalIds) {
+      const { folder, uid } = decodeImapExternalId(eid);
+      const list = byFolder.get(folder) ?? [];
+      list.push(uid);
+      byFolder.set(folder, list);
+    }
+    messages = [];
+    for (const [folder, uids] of byFolder) {
+      const result = await api("POST", `${endpoint}/batch_get_emails`, token, { uids, folder });
+      for (const m of result.messages ?? []) {
+        messages.push({ ...m, id: encodeImapExternalId(folder, m.uid) });
+      }
+    }
+    if (!messages.length) return 0;
+  } else {
+    const result = await api("POST", `${endpoint}/batch_get_emails`, token, { messageIds: externalIds });
+    messages = result.messages ?? [];
+    if (!messages.length) return 0;
+  }
 
   await db.begin(async (tx: any) => {
     const emailRows = messages.map((msg: any) => ({
@@ -377,6 +481,23 @@ async function importBatch(userId: string, provider: string, token: string): Pro
   });
 
   return messages.length;
+  } catch (e: any) {
+    // Re-insert into queue for retry (like Twenty's setAdd on error)
+    if (externalIds.length > 0) {
+      const now = new Date().toISOString();
+      await db`
+        INSERT INTO crm.email_import_queue (user_id, provider, external_id, created_at)
+        SELECT * FROM unnest(
+          ${db.array(externalIds.map(() => userId))}::text[],
+          ${db.array(externalIds.map(() => provider))}::text[],
+          ${db.array(externalIds)}::text[],
+          ${db.array(externalIds.map(() => now))}::timestamptz[]
+        )
+      `.catch(() => {});
+    }
+    log.error(`importBatch failed, ${externalIds.length} items re-queued: ${e.message}`);
+    throw e;
+  }
 }
 
 // ─── Rematch orphan participants ────────────────────────────────────────────
@@ -456,12 +577,27 @@ async function sendEmail(params: { provider: string; to: string; subject: string
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+function encodeImapExternalId(folder: string, uid: number): string {
+  return folder === "INBOX" ? String(uid) : `${folder}:${uid}`;
+}
+
+function decodeImapExternalId(externalId: string): { folder: string; uid: number } {
+  const colonIdx = externalId.lastIndexOf(":");
+  if (colonIdx > 0 && !externalId.startsWith("INBOX")) {
+    return { folder: externalId.slice(0, colonIdx), uid: parseInt(externalId.slice(colonIdx + 1), 10) };
+  }
+  return { folder: "INBOX", uid: parseInt(externalId, 10) };
+}
+
 function extractHeaderMessageId(msg: any): string | null {
   return msg.headerMessageId || null;
 }
 
 function detectDirection(msg: any): string {
-  return (msg.labelIds ?? []).includes("SENT") ? "outgoing" : "incoming";
+  if ((msg.labelIds ?? []).includes("SENT")) return "outgoing";
+  const { folder } = typeof msg.id === "string" && msg.id.includes(":") ? decodeImapExternalId(msg.id) : { folder: "" };
+  if (/^(sent|sent items|sent mail)$/i.test(folder)) return "outgoing";
+  return "incoming";
 }
 
 function extractParticipants(msg: any): Array<{ address: string; name: string; role: string }> {

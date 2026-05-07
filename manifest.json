@@ -85,7 +85,7 @@
       "fields": [
         { "name": "email_id",    "type": "entity_link", "onDelete": "cascade", "references": { "entity": "emails", "field": "id" }, "required": true },
         { "name": "user_id",     "type": "text", "required": true },
-        { "name": "provider",    "type": "text", "required": true, "enum_values": ["gmail", "outlook"] },
+        { "name": "provider",    "type": "text", "required": true, "enum_values": ["gmail", "outlook", "imap_smtp"] },
         { "name": "external_id", "type": "text", "required": true },
         { "name": "direction",   "type": "text", "enum_values": ["incoming", "outgoing"] }
       ]
@@ -104,7 +104,7 @@
       "entityName": "sync_state",
       "fields": [
         { "name": "user_id",        "type": "text", "required": true },
-        { "name": "provider",       "type": "text", "required": true, "enum_values": ["gmail", "outlook"] },
+        { "name": "provider",       "type": "text", "required": true, "enum_values": ["gmail", "outlook", "imap_smtp"] },
         { "name": "cursor",         "type": "text" },
         { "name": "status",         "type": "text", "enum_values": ["idle", "syncing", "failed"] },
         { "name": "sync_stage",     "type": "text", "enum_values": ["list_fetch", "messages_import"] },
