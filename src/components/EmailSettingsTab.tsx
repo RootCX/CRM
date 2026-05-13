@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useAuth, useIntegration, useAppCollection, useRuntimeClient } from "@rootcx/sdk";
+import { useAuth, useIntegration, useAppCollection, useRuntimeClient, useCrons } from "@rootcx/sdk";
 import { Button, Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Separator, toast, ConfirmDialog, Input, Label } from "@rootcx/ui";
 import { IconBrandGmail, IconBrandWindows, IconMail, IconCheck, IconX, IconRefresh, IconTrash, IconLoader2 } from "@tabler/icons-react";
 import { APP_ID } from "@/lib/constants";
@@ -14,6 +14,7 @@ interface SyncState {
   last_synced_at?: string;
   error_count?: number;
   enabled?: boolean;
+  cron_id?: string;
 }
 
 export default function EmailSettingsTab() {
@@ -23,6 +24,7 @@ export default function EmailSettingsTab() {
   const { connected: outlookConnected, loading: outlookLoading, connect: connectOutlook, disconnect: disconnectOutlook } = useIntegration("outlook");
   const { connected: imapConnected, loading: imapLoading, connect: connectImap, submitCredentials: submitImapCredentials, disconnect: disconnectImap } = useIntegration("imap_smtp");
   const { data: syncStates, loading: syncLoading, refetch } = useAppCollection<SyncState>(APP_ID, "sync_state");
+  const { create: createCron, remove: removeCron, trigger: triggerCron } = useCrons(APP_ID);
 
   const { total: emailCount } = useAppCollection<{ id: string }>(APP_ID, "emails", { limit: 1 });
   const { total: queueCount } = useAppCollection<{ id: string }>(APP_ID, "email_import_queue", { limit: 1 });
@@ -58,12 +60,19 @@ export default function EmailSettingsTab() {
     if (!userId || creatingRef.current) return;
     creatingRef.current = true;
     try {
+      const cron = await createCron({
+        name: `sync_${provider}_${userId}`,
+        schedule: "*/5 * * * *",
+        payload: { user_id: userId, provider },
+        overlapPolicy: "skip",
+      });
       await client.createRecord(APP_ID, "sync_state", {
         user_id: userId,
         provider,
         enabled: true,
         status: "idle",
         error_count: 0,
+        cron_id: cron.id,
       });
       await refetch();
     } catch {}
@@ -72,7 +81,10 @@ export default function EmailSettingsTab() {
 
   const disableSyncState = async (syncState: SyncState) => {
     try {
-      await client.updateRecord(APP_ID, "sync_state", syncState.id, { enabled: false });
+      await Promise.all([
+        syncState.cron_id ? removeCron(syncState.cron_id).catch(() => {}) : Promise.resolve(),
+        client.updateRecord(APP_ID, "sync_state", syncState.id, { enabled: false, cron_id: null }),
+      ]);
       await refetch();
       toast.success("Sync disabled");
     } catch (e: any) {
@@ -130,8 +142,12 @@ export default function EmailSettingsTab() {
     if (gmailConnected && !gmailSync) await ensureSyncState("gmail");
     if (outlookConnected && !outlookSync) await ensureSyncState("outlook");
     if (imapConnected && !imapSync) await ensureSyncState("imap_smtp");
-    await client.rpc(APP_ID, "trigger_sync", {});
-    await refetch();
+    const fresh = (await refetch()) ?? syncStates;
+    await Promise.all(
+      fresh
+        .filter((s: SyncState) => s.user_id === userId && s.cron_id)
+        .map((s: SyncState) => triggerCron(s.cron_id!)),
+    );
   };
 
   if (gmailLoading || outlookLoading || imapLoading || syncLoading) {

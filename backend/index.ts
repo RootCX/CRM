@@ -21,7 +21,6 @@ serve({
     ensureIndexes().catch((e) => log.error(`indexes: ${e.message}`));
   },
   rpc: {
-    trigger_sync: (_p: any, caller: any) => dispatchSync(caller),
     get_contact_emails: (p: any, caller: any) => getContactEmails(p, caller),
     send_email: (p: any, caller: any) => sendEmail(p, caller),
     add_filtered_to_list: (p: any, caller: any) => addFilteredToList(p, caller),
@@ -70,49 +69,33 @@ async function flushEmailData() {
 }
 
 // ─── Job dispatcher ─────────────────────────────────────────────────────────
+// Cron tick payload = { user_id, provider }. Caller JWT is the cron's creator,
+// so integration creds resolve to that user naturally. Self-recursion payload
+// carries account_id when more queue items remain.
 
 async function handleJob(payload: any, caller: any) {
-  const type = payload?.type;
-  if (type === "sync_emails" || !type) return dispatchSync(caller);
-  if (type === "sync_account") return syncAccount(payload, caller);
-  return { skipped: true, reason: `unknown: ${type}` };
-}
-
-// ─── Dispatch: enqueue 1 job per enabled account ────────────────────────────
-
-async function dispatchSync(caller: any) {
-  const token: string = caller?.authToken;
-  if (!token) throw new Error("Not authenticated");
-
-  const res = await api("POST", `${COL_SYNC}/query`, token, { where: { enabled: { $eq: true } }, limit: 100 });
-  const accounts: any[] = res?.data ?? [];
-  if (!accounts.length) return { dispatched: 0 };
-
-  let dispatched = 0;
-  for (const account of accounts) {
-    if (account.status === "syncing") continue;
-    await api("PATCH", `${COL_SYNC}/${account.id}`, token, { status: "syncing" });
-    await api("POST", `/api/v1/apps/${APP_ID}/jobs`, token, {
-      payload: { type: "sync_account", account_id: account.id, user_id: account.user_id, provider: account.provider },
-    });
-    dispatched++;
+  if (payload?.type === "sync_account" || (payload?.user_id && payload?.provider)) {
+    return syncAccount(payload, caller);
   }
-  return { dispatched };
+  return { skipped: true, reason: "unrecognized payload" };
 }
 
-// ─── Sync one account (pgmq job) ───────────────────────────────────────────
+// ─── Sync one account ───────────────────────────────────────────────────────
 
 async function syncAccount(payload: any, caller: any) {
   const token: string = caller?.authToken;
   if (!token) throw new Error("Not authenticated");
-  const { account_id, user_id, provider } = payload;
+  const { user_id, provider } = payload;
+  let account_id: string | undefined = payload.account_id;
 
   try {
-    const syncState = await api("POST", `${COL_SYNC}/query`, token, {
-      where: { id: { $eq: account_id } }, limit: 1,
-    });
+    const where = account_id
+      ? { id: { $eq: account_id } }
+      : { user_id: { $eq: user_id }, provider: { $eq: provider } };
+    const syncState = await api("POST", `${COL_SYNC}/query`, token, { where, limit: 1 });
     const account = syncState?.data?.[0];
-    if (!account) return { error: "account not found" };
+    if (!account) return { error: "sync_state row not found" };
+    account_id = account.id;
 
     const start = Date.now();
     let totalImported = 0;
@@ -152,10 +135,11 @@ async function syncAccount(payload: any, caller: any) {
     return { imported: totalImported, queued: totalQueued, remaining: moreInQueue };
   } catch (e: any) {
     log.error(`sync ${user_id}/${provider}: ${e.message}`);
-    await api("PATCH", `${COL_SYNC}/${account_id}`, token, {
-      status: e.message?.includes("401") || e.message?.includes("403") ? "needs_reauth" : "failed",
-      error_count: (payload.error_count ?? 0) + 1,
-    }).catch(() => {});
+    if (account_id) {
+      await api("PATCH", `${COL_SYNC}/${account_id}`, token, {
+        status: e.message?.includes("401") || e.message?.includes("403") ? "needs_reauth" : "failed",
+      }).catch(() => {});
+    }
     return { error: e.message };
   }
 }

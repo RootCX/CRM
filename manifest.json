@@ -110,7 +110,8 @@
         { "name": "sync_stage",     "type": "text", "enum_values": ["list_fetch", "messages_import"] },
         { "name": "last_synced_at", "type": "timestamp" },
         { "name": "error_count",    "type": "number" },
-        { "name": "enabled",        "type": "boolean" }
+        { "name": "enabled",        "type": "boolean" },
+        { "name": "cron_id",        "type": "text" }
       ]
     },
     {
@@ -210,12 +211,5 @@
       { "key": "email_import_queue.read",  "description": "View email import queue" },
       { "key": "email_import_queue.write", "description": "Manage email import queue" }
     ]
-  },
-  "crons": [
-    {
-      "name": "sync_emails",
-      "schedule": "*/5 * * * *",
-      "overlapPolicy": "skip"
-    }
-  ]
+  }
 }
