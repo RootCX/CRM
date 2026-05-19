@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useAppRecord, useAppCollection, useIntegration, useRuntimeClient } from "@rootcx/sdk";
+import { useAppRecord, useAppCollection, useIntegration, useRuntimeClient, useAuth } from "@rootcx/sdk";
+import { EmailThreadList } from "@/components/EmailThreadList";
+import { ComposeEmailDialog, type ComposeMode } from "@/components/ComposeEmailDialog";
 import {
   PageHeader, Tabs, TabsList, TabsTrigger, TabsContent,
   Badge, StatusBadge, Button, Separator,
@@ -39,22 +41,19 @@ function InfoRow({ icon, label, value, href }: { icon: React.ReactNode; label: s
 }
 
 
-interface EmailWithParticipants extends StoredEmail {
-  participants?: EmailParticipant[];
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "now";
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
-  const diffDays = Math.floor(diffHr / 24);
-  if (diffDays < 7) return `${diffDays}d`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+interface EmailWithParticipants {
+  id: string;
+  header_message_id?: string;
+  thread_id?: string;
+  thread_external_id?: string;
+  subject?: string;
+  body?: string;
+  body_html?: string;
+  body_text_raw?: string;
+  received_at: string;
+  created_at?: string;
+  participants: EmailParticipant[];
+  attachments?: any[];
 }
 
 function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmail?: string }) {
@@ -62,12 +61,14 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
   const { connected: outlookConnected, loading: outlookLoading, connect: connectOutlook } = useIntegration("outlook");
   const { connected: imapConnected, loading: imapLoading, connect: connectImap, submitCredentials: submitImapCreds } = useIntegration("imap_smtp");
   const client = useRuntimeClient();
+  const { user } = useAuth();
   const [emails, setEmails] = useState<EmailWithParticipants[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [replyTo, setReplyTo] = useState<EmailWithParticipants | "new" | null>(null);
+  const [compose, setCompose] = useState<ComposeMode | null>(null);
   const [imapForm, setImapForm] = useState<any>(null);
   const [imapValues, setImapValues] = useState<Record<string, string>>({});
+  const [aliases, setAliases] = useState<string[]>([]);
+  const [primaryHandle, setPrimaryHandle] = useState<string>("");
 
   const connected = gmailConnected || outlookConnected || imapConnected;
   const integLoading = gmailLoading || outlookLoading || imapLoading;
@@ -83,16 +84,25 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchEmails(); }, [contactId]);
-
-  const fromParticipant = (email: EmailWithParticipants) =>
-    email.participants?.find((p) => p.role === "from");
-
-  const handleSend = async (to: string, subject: string, body: string) => {
-    await client.rpc(APP_ID, "send_email", { provider, to, subject, body });
-    toast.success("Email sent");
-    setReplyTo(null);
+  const loadAliases = async () => {
+    if (provider !== "gmail" || !gmailConnected) return;
+    try {
+      const r = await client.rpc(APP_ID, "refresh_aliases", { provider }) as any;
+      if (r?.handle) {
+        setPrimaryHandle(r.handle);
+        setAliases([r.handle, ...(r.aliases ?? [])]);
+      }
+    } catch { /* fallback to user email */ }
   };
+
+  useEffect(() => { fetchEmails(); }, [contactId]);
+  useEffect(() => { loadAliases(); }, [gmailConnected, provider]);
+  useEffect(() => {
+    if (!primaryHandle && user?.email) {
+      setPrimaryHandle(user.email);
+      setAliases([user.email]);
+    }
+  }, [user?.email, primaryHandle]);
 
   if (integLoading || loading) return <LoadingState variant="spinner" />;
   const handleConnectImap = async () => {
@@ -160,14 +170,15 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
     <EmptyState icon={<IconMail className="h-8 w-8" />} title="No email address" description="Add an email address to this contact to see their email history." />
   );
 
-  if (replyTo) {
-    const isReply = replyTo !== "new";
+  if (compose) {
     return (
-      <ComposeEmail
-        to={isReply ? (fromParticipant(replyTo as EmailWithParticipants)?.address ?? contactEmail) : contactEmail}
-        subject={isReply ? `Re: ${(replyTo as EmailWithParticipants).subject?.replace(/^Re:\s*/i, "")}` : ""}
-        onSend={handleSend}
-        onCancel={() => setReplyTo(null)}
+      <ComposeEmailDialog
+        mode={compose}
+        provider={provider}
+        aliases={aliases}
+        primaryHandle={primaryHandle}
+        onSent={() => { setCompose(null); fetchEmails(); }}
+        onCancel={() => setCompose(null)}
       />
     );
   }
@@ -177,7 +188,7 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">{emails.length} email{emails.length !== 1 ? "s" : ""}</p>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => setReplyTo("new")}>
+          <Button variant="outline" size="sm" onClick={() => setCompose({ kind: "new", defaultTo: contactEmail })}>
             <IconMail className="h-4 w-4 mr-1.5" /> Compose
           </Button>
           <Button variant="outline" size="sm" onClick={fetchEmails}>
@@ -189,126 +200,16 @@ function EmailsTab({ contactId, contactEmail }: { contactId: string; contactEmai
       {emails.length === 0 && <EmptyState icon={<IconMail className="h-8 w-8" />} title="No emails yet" description="Emails will appear here once the background sync completes." />}
 
       <ScrollArea className="flex-1">
-        <div className="flex flex-col">
-          {emails.map((email) => {
-            const from = fromParticipant(email);
-            const isExpanded = expandedId === email.id;
-            const senderName = from?.name || from?.address || "Unknown";
-            const initial = senderName[0]?.toUpperCase() ?? "?";
-
-            return (
-              <div key={email.id} className="border-b last:border-b-0">
-                <button
-                  onClick={() => setExpandedId(isExpanded ? null : email.id)}
-                  className={cn(
-                    "w-full flex items-start gap-3 p-3 text-left transition-colors hover:bg-muted/50",
-                    isExpanded && "bg-muted/30"
-                  )}
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-medium">
-                    {initial}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium truncate">{senderName}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {email.received_at && formatRelativeDate(email.received_at)}
-                      </span>
-                    </div>
-                    <p className="text-sm truncate">{email.subject || "(no subject)"}</p>
-                    {!isExpanded && (
-                      <p className="text-xs text-muted-foreground truncate mt-0.5">
-                        {email.body?.slice(0, 120)}
-                      </p>
-                    )}
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="px-3 pb-3 pl-14">
-                    <div className="flex flex-col gap-0.5 text-xs text-muted-foreground mb-3">
-                      <span>From: {from?.name ? `${from.name} <${from.address}>` : from?.address}</span>
-                      <span>To: {email.participants?.filter((p) => p.role === "to").map((p) => p.name || p.address).join(", ")}</span>
-                      {email.participants?.some((p) => p.role === "cc") && (
-                        <span>Cc: {email.participants.filter((p) => p.role === "cc").map((p) => p.name || p.address).join(", ")}</span>
-                      )}
-                      <span>{email.received_at && new Date(email.received_at).toLocaleString()}</span>
-                    </div>
-                    <div className="text-sm whitespace-pre-line break-words leading-relaxed">
-                      {email.body || "(no content)"}
-                    </div>
-                    <div className="mt-3 pt-3 border-t">
-                      <Button variant="outline" size="sm" onClick={() => setReplyTo(email)}>
-                        Reply
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <EmailThreadList
+          emails={emails}
+          onReply={(e) => setCompose({ kind: "reply", email: e })}
+          onReplyAll={(e) => setCompose({ kind: "reply_all", email: e })}
+          onForward={(e) => setCompose({ kind: "forward", email: e })}
+        />
       </ScrollArea>
     </div>
   );
 }
-
-function ComposeEmail({ to, subject: initSubject, onSend, onCancel }: {
-  to: string;
-  subject: string;
-  onSend: (to: string, subject: string, body: string) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [subject, setSubject] = useState(initSubject);
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!body.trim()) return;
-    setSending(true);
-    try { await onSend(to, subject, body); }
-    catch (err: any) { toast.error(err?.message ?? "Failed to send"); }
-    finally { setSending(false); }
-  };
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium">New message</h3>
-        <Button variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>
-      </div>
-      <form onSubmit={handleSubmit} className="flex flex-col flex-1 gap-3">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground w-12">To:</span>
-          <span className="font-medium">{to}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground w-12">Subject:</span>
-          <input
-            value={subject}
-            onChange={(e) => setSubject(e.target.value)}
-            className="flex-1 text-sm bg-transparent border-b border-border/50 focus:border-primary outline-none py-1"
-            placeholder="Subject"
-          />
-        </div>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          className="flex-1 text-sm bg-transparent border rounded-md p-3 resize-none outline-none focus:ring-1 focus:ring-primary"
-          placeholder="Write your message..."
-          autoFocus
-        />
-        <div className="flex justify-end">
-          <Button type="submit" disabled={sending || !body.trim()}>
-            {sending ? "Sending..." : "Send"}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 
 function DealsTab({ contactId }: { contactId: string }) {
   const navigate = useNavigate();

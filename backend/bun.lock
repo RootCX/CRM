@@ -1,0 +1,18 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "@crm/backend",
+      "dependencies": {
+        "planer": "1.2.0",
+        "postgres": "^3.4.5",
+      },
+    },
+  },
+  "packages": {
+    "planer": ["planer@1.2.0", "", {}, "sha512-XhP/YeTk2eSfo7SvLstlKXQaxoDVc/Z46cIhl015rPcByZm0Uj2pk6GYUclETiB2oZGK1Ke+XdsjRTuMwjkcxA=="],
+
+    "postgres": ["postgres@3.4.9", "", {}, "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="],
+  }
+}

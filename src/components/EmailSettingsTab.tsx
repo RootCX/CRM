@@ -3,6 +3,7 @@ import { useAuth, useIntegration, useAppCollection, useRuntimeClient, useCrons }
 import { Button, Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Separator, toast, ConfirmDialog, Input, Label } from "@rootcx/ui";
 import { IconBrandGmail, IconBrandWindows, IconMail, IconCheck, IconX, IconRefresh, IconTrash, IconLoader2 } from "@tabler/icons-react";
 import { APP_ID } from "@/lib/constants";
+import { formatRelative } from "@/lib/utils";
 
 interface SyncState {
   id: string;
@@ -13,6 +14,10 @@ interface SyncState {
   sync_stage?: string;
   last_synced_at?: string;
   error_count?: number;
+  throttle_failure_count?: number;
+  throttle_retry_after?: string;
+  handle?: string;
+  handle_aliases?: string;
   enabled?: boolean;
   cron_id?: string;
 }
@@ -142,12 +147,31 @@ export default function EmailSettingsTab() {
     if (gmailConnected && !gmailSync) await ensureSyncState("gmail");
     if (outlookConnected && !outlookSync) await ensureSyncState("outlook");
     if (imapConnected && !imapSync) await ensureSyncState("imap_smtp");
-    const fresh = (await refetch()) ?? syncStates;
+    let fresh = (await refetch()) ?? syncStates;
+    for (const s of fresh.filter((s: SyncState) => s.user_id === userId && !s.cron_id)) {
+      await reactivateSyncState(s);
+    }
+    fresh = (await refetch()) ?? fresh;
     await Promise.all(
       fresh
         .filter((s: SyncState) => s.user_id === userId && s.cron_id)
         .map((s: SyncState) => triggerCron(s.cron_id!)),
     );
+  };
+
+  const reactivateSyncState = async (syncState: SyncState) => {
+    try {
+      const cron = await createCron({
+        name: `sync_${syncState.provider}_${userId}`,
+        schedule: "*/5 * * * *",
+        payload: { user_id: userId, provider: syncState.provider },
+        overlapPolicy: "skip",
+      });
+      await client.updateRecord(APP_ID, "sync_state", syncState.id, {
+        enabled: true, cron_id: cron.id, status: "idle",
+        throttle_failure_count: 0, throttle_retry_after: null,
+      });
+    } catch {}
   };
 
   if (gmailLoading || outlookLoading || imapLoading || syncLoading) {
@@ -289,16 +313,6 @@ function EmailProviderCard({
     }
   };
 
-  const formatLastSync = (dateStr?: string) => {
-    if (!dateStr) return "Never";
-    const d = new Date(dateStr);
-    const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
-    if (diffMin < 1) return "Just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHr = Math.floor(diffMin / 60);
-    if (diffHr < 24) return `${diffHr}h ago`;
-    return d.toLocaleDateString();
-  };
 
   return (
     <Card>
@@ -325,17 +339,23 @@ function EmailProviderCard({
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground space-y-1">
-                <p>Status: <span className="font-medium text-foreground">{syncState?.status ?? "idle"}</span></p>
-                <p>Last synced: <span className="font-medium text-foreground">{formatLastSync(syncState?.last_synced_at)}</span></p>
-                {(syncState?.error_count ?? 0) > 0 && (
-                  <p className="text-destructive">Errors: {syncState?.error_count}</p>
-                )}
+                <SyncStatusDisplay status={syncState?.status} throttleRetryAfter={syncState?.throttle_retry_after} lastSyncedAt={syncState?.last_synced_at} />
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handleSyncNow} disabled={syncing}>
-                  <IconRefresh className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
-                  {syncing ? "Syncing..." : "Sync now"}
-                </Button>
+                {syncState?.status === "needs_reauth" ? (
+                  <Button size="sm" onClick={onConnect}>Reconnect</Button>
+                ) : syncState?.status === "failed_permanent" ? (
+                  <Button variant="outline" size="sm" onClick={handleSyncNow}>Retry</Button>
+                ) : (() => {
+                  const isSyncing = syncing || syncState?.status === "syncing";
+                  const isThrottled = syncState?.status === "failed_temporary" && syncState?.throttle_retry_after && new Date(syncState.throttle_retry_after).getTime() > Date.now();
+                  return (
+                    <Button variant="outline" size="sm" onClick={handleSyncNow} disabled={isSyncing || !!isThrottled}>
+                      <IconRefresh className={`h-4 w-4 mr-1 ${isSyncing ? "animate-spin" : ""}`} />
+                      {isSyncing ? "Syncing..." : "Sync now"}
+                    </Button>
+                  );
+                })()}
                 <Button variant="outline" size="sm" onClick={handleDisconnect} disabled={disconnecting}>
                   {disconnecting ? "..." : "Disconnect"}
                 </Button>
@@ -366,4 +386,33 @@ function EmailProviderCard({
       </CardContent>
     </Card>
   );
+}
+
+function SyncStatusDisplay({ status, throttleRetryAfter, lastSyncedAt }: { status?: string; throttleRetryAfter?: string; lastSyncedAt?: string }) {
+
+  switch (status) {
+    case "syncing":
+      return <p><IconLoader2 className="h-3.5 w-3.5 inline mr-1 animate-spin text-blue-500" />Syncing...</p>;
+    case "needs_reauth":
+      return <p className="text-destructive font-medium">Reconnection required</p>;
+    case "failed_temporary": {
+      const retryAt = throttleRetryAfter ? new Date(throttleRetryAfter) : null;
+      const retryIn = retryAt ? Math.max(0, Math.ceil((retryAt.getTime() - Date.now()) / 60000)) : 0;
+      return (
+        <div>
+          <p className="text-orange-600 font-medium">Throttled</p>
+          {retryIn > 0 && <p className="text-xs">Next retry in ~{retryIn}m</p>}
+        </div>
+      );
+    }
+    case "failed_permanent":
+      return <p className="text-destructive font-medium">Sync failed permanently. Click Retry to reset.</p>;
+    default:
+      return (
+        <div>
+          <p>Status: <span className="font-medium text-foreground">{status ?? "idle"}</span></p>
+          <p>Last synced: <span className="font-medium text-foreground">{formatRelative(lastSyncedAt ?? "")}</span></p>
+        </div>
+      );
+  }
 }
