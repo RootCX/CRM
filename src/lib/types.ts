@@ -134,6 +134,41 @@ export interface Attachment {
   updated_at: string;
 }
 
+export type MeetingResponseStatus = "needs_action" | "declined" | "tentative" | "accepted";
+export type MeetingVisibility = "share_everything" | "metadata";
+
+export interface TimelineMeetingParticipant {
+  contactId: string | null;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  avatarUrl: string;
+  handle: string;
+  responseStatus: MeetingResponseStatus;
+  isOrganizer: boolean;
+}
+
+export interface TimelineMeeting {
+  id: string;
+  title: string;
+  isFullDay: boolean;
+  startsAt: string;
+  endsAt: string;
+  description: string;
+  location: string;
+  conferenceSolution: string;
+  conferenceLink: { primaryLinkLabel: string; primaryLinkUrl: string };
+  participants: TimelineMeetingParticipant[];
+  visibility: MeetingVisibility;
+  externalCreatedAt: string;
+  htmlLink: string;
+}
+
+export interface TimelineMeetingsResponse {
+  totalNumberOfMeetings: number;
+  timelineMeetings: TimelineMeeting[];
+}
+
 export interface Favorite {
   id: string;
   entity_type: "contact" | "company" | "deal";

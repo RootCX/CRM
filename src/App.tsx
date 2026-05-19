@@ -12,7 +12,7 @@ import {
 import {
   IconLogout, IconUsers, IconBuilding, IconCurrencyDollar, IconChecklist,
   IconSettings, IconChevronUp, IconNotes, IconUser, IconBuildingSkyscraper,
-  IconDatabase, IconSun, IconMoon, IconPlus, IconList, IconMail,
+  IconDatabase, IconSun, IconMoon, IconPlus, IconList, IconMail, IconCalendarEvent,
 } from "@tabler/icons-react";
 import ContactsView   from "./views/ContactsView";
 import ContactDetail  from "./views/ContactDetail";
@@ -23,6 +23,7 @@ import NotesView      from "./views/NotesView";
 import ListView       from "./views/ListView";
 import SeedView       from "./views/SeedView";
 import EmailSettingsTab from "./components/EmailSettingsTab";
+import CalendarSettingsTab from "./components/CalendarSettingsTab";
 import type { Favorite, List } from "./lib/types";
 import { APP_ID, LIST_ENTITY_TYPES } from "./lib/constants";
 
@@ -245,11 +246,15 @@ function SettingsView() {
           <TabsTrigger value="email" className="flex items-center gap-2">
             <IconMail className="h-4 w-4" /> Email
           </TabsTrigger>
+          <TabsTrigger value="calendar" className="flex items-center gap-2">
+            <IconCalendarEvent className="h-4 w-4" /> Calendar
+          </TabsTrigger>
           <TabsTrigger value="demo-data" className="flex items-center gap-2">
             <IconDatabase className="h-4 w-4" /> Demo data
           </TabsTrigger>
         </TabsList>
         <TabsContent value="email" className="mt-4"><EmailSettingsTab /></TabsContent>
+        <TabsContent value="calendar" className="mt-4"><CalendarSettingsTab /></TabsContent>
         <TabsContent value="demo-data" className="mt-4"><SeedView /></TabsContent>
       </Tabs>
     </div>

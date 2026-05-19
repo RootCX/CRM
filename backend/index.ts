@@ -15,6 +15,11 @@ serve({
     get_thread: (p: any, caller: any) => getThread(p, caller),
     send_email: (p: any, caller: any) => sendEmail(p, caller),
     add_filtered_to_list: (p: any, caller: any) => addFilteredToList(p, caller),
+    get_timeline_meetings_from_contact_id: (p: any, caller: any) => timelineMeetingsFromContactIds(p, caller),
+    get_timeline_meetings_from_company_id: (p: any, caller: any) => timelineMeetingsFromCompanyId(p, caller),
+    get_timeline_meetings_from_deal_id: (p: any, caller: any) => timelineMeetingsFromDealId(p, caller),
+    get_calendar_sync_state: (_p: any, caller: any) => calendarSyncState(caller),
+    get_meetings_count: (_p: any, caller: any) => meetingsCount(caller),
   },
 });
 
@@ -126,6 +131,250 @@ async function sendEmail(params: any, caller: any) {
   });
 
   return result;
+}
+
+interface TimelineMeetingParticipant {
+  contactId: string | null;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  avatarUrl: string;
+  handle: string;
+  responseStatus: "needs_action" | "declined" | "tentative" | "accepted";
+  isOrganizer: boolean;
+}
+
+interface TimelineMeeting {
+  id: string;
+  title: string;
+  isFullDay: boolean;
+  startsAt: string;
+  endsAt: string;
+  description: string;
+  location: string;
+  conferenceSolution: string;
+  conferenceLink: { primaryLinkLabel: string; primaryLinkUrl: string };
+  participants: TimelineMeetingParticipant[];
+  visibility: "share_everything" | "metadata";
+  externalCreatedAt: string;
+  htmlLink: string;
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 50;
+
+function groupByField<T>(rows: T[], key: keyof T): Map<any, T[]> {
+  const out = new Map<any, T[]>();
+  for (const r of rows) {
+    const k = r[key];
+    const list = out.get(k);
+    if (list) list.push(r);
+    else out.set(k, [r]);
+  }
+  return out;
+}
+
+async function timelineForContactIds(
+  ids: string[],
+  page: number,
+  pageSize: number,
+  caller: any,
+): Promise<{ totalNumberOfMeetings: number; timelineMeetings: TimelineMeeting[] }> {
+  if (!caller?.authToken) throw new Error("Not authenticated");
+  if (!ids.length) return { totalNumberOfMeetings: 0, timelineMeetings: [] };
+
+  const userId: string | undefined = caller?.userId;
+  const offset = (page - 1) * pageSize;
+
+  const eventRows = await db`
+    WITH addresses AS (
+      SELECT DISTINCT lower(email) AS addr FROM crm.contacts
+      WHERE id = ANY(${ids}) AND email IS NOT NULL AND email <> ''
+    )
+    SELECT e.id, e.starts_at, COUNT(*) OVER() AS total
+    FROM google_calendar.events e
+    WHERE EXISTS (
+      SELECT 1 FROM google_calendar.attendees a
+      JOIN addresses ON addresses.addr = lower(a.address)
+      WHERE a.event_id = e.id
+    )
+    ORDER BY e.starts_at DESC NULLS LAST
+    LIMIT ${pageSize} OFFSET ${offset}
+  `;
+
+  const total = eventRows.length ? Number(eventRows[0].total) : 0;
+  if (!eventRows.length) return { totalNumberOfMeetings: total, timelineMeetings: [] };
+  const eventIds = eventRows.map((r: any) => r.id);
+
+  const [events, attendees, associations] = await Promise.all([
+    db`SELECT * FROM google_calendar.events WHERE id = ANY(${eventIds})`,
+    db`SELECT * FROM google_calendar.attendees WHERE event_id = ANY(${eventIds})`,
+    db`SELECT * FROM google_calendar.channel_event_associations WHERE event_id = ANY(${eventIds})`,
+  ]);
+
+  const calendarIds = [...new Set(associations.map((a: any) => a.calendar_external_id))];
+  const calendars = calendarIds.length
+    ? await db`
+        SELECT external_id, user_id, visibility
+        FROM google_calendar.calendars
+        WHERE external_id = ANY(${calendarIds}) AND (visibility = 'share_everything' OR user_id = ${userId ?? null})
+      `
+    : [];
+  const calVisibility = new Map<string, { visibility: string; userId: string }>(
+    calendars.map((c: any) => [c.external_id, { visibility: c.visibility ?? "share_everything", userId: c.user_id }]),
+  );
+
+  const attendeeAddresses = [...new Set(attendees.map((a: any) => a.address.toLowerCase()))];
+  const matchingContacts = attendeeAddresses.length
+    ? await db`SELECT id, lower(email) AS email, first_name, last_name, avatar_url FROM crm.contacts WHERE lower(email) = ANY(${attendeeAddresses})`
+    : [];
+  const contactByEmail = new Map<string, any>(matchingContacts.map((c: any) => [c.email, c]));
+
+  const attendeesByEvent = groupByField<any>(attendees, "event_id");
+  const assocsByEvent = groupByField<any>(associations, "event_id");
+  const eventById = new Map<string, any>(events.map((e: any) => [e.id, e]));
+
+  const timelineMeetings: TimelineMeeting[] = eventRows.map((row: any) => {
+    const e = eventById.get(row.id);
+    const evAssocs = assocsByEvent.get(row.id) ?? [];
+
+    const hasFullAccess = evAssocs.some((assoc: any) => {
+      const cal = calVisibility.get(assoc.calendar_external_id);
+      if (!cal) return false;
+      return cal.visibility === "share_everything" || (!!userId && cal.userId === userId);
+    });
+    const visibility: "share_everything" | "metadata" = hasFullAccess ? "share_everything" : "metadata";
+
+    const participants: TimelineMeetingParticipant[] = (attendeesByEvent.get(row.id) ?? []).map((a: any) => {
+      const contact = contactByEmail.get(a.address.toLowerCase());
+      return {
+        contactId: contact?.id ?? null,
+        firstName: contact?.first_name ?? "",
+        lastName: contact?.last_name ?? "",
+        displayName:
+          contact?.first_name || contact?.last_name
+            ? [contact.first_name, contact.last_name].filter(Boolean).join(" ")
+            : a.display_name || a.address,
+        avatarUrl: contact?.avatar_url ?? "",
+        handle: a.address ?? "",
+        responseStatus: a.response_status ?? "needs_action",
+        isOrganizer: !!a.is_organizer,
+      };
+    });
+
+    return {
+      id: e.id,
+      title: e.title ?? "",
+      isFullDay: !!e.is_full_day,
+      startsAt: e.starts_at,
+      endsAt: e.ends_at,
+      description: e.description ?? "",
+      location: e.location ?? "",
+      conferenceSolution: e.conference_solution ?? "",
+      conferenceLink: {
+        primaryLinkLabel: e.conference_link ?? "",
+        primaryLinkUrl: e.conference_link ?? "",
+      },
+      participants,
+      visibility,
+      externalCreatedAt: e.external_created_at,
+      htmlLink: e.html_link ?? "",
+    };
+  });
+
+  return { totalNumberOfMeetings: total, timelineMeetings };
+}
+
+const pageArgs = (p: any): { page: number; pageSize: number } => ({
+  page: Math.max(1, p?.page ?? 1),
+  pageSize: Math.min(MAX_PAGE_SIZE, Math.max(1, p?.pageSize ?? DEFAULT_PAGE_SIZE)),
+});
+
+async function timelineMeetingsFromContactIds(
+  params: { contact_id: string; page?: number; pageSize?: number },
+  caller: any,
+) {
+  const { page, pageSize } = pageArgs(params);
+  const ids = params.contact_id ? [params.contact_id] : [];
+  return timelineForContactIds(ids, page, pageSize, caller);
+}
+
+async function timelineMeetingsFromCompanyId(
+  params: { company_id: string; page?: number; pageSize?: number },
+  caller: any,
+) {
+  if (!params.company_id) throw new Error("company_id required");
+  const { page, pageSize } = pageArgs(params);
+  const rows = await db`SELECT id FROM crm.contacts WHERE company_id = ${params.company_id}`;
+  return timelineForContactIds(rows.map((r: any) => r.id), page, pageSize, caller);
+}
+
+async function calendarSyncState(caller: any) {
+  const userId: string | undefined = caller?.userId;
+  if (!userId) return { cursors: [] };
+  const rows = await db`
+    SELECT id, calendar_external_id, status, last_synced_at, throttle_count,
+           throttle_after, cron_id, sync_token IS NOT NULL AS has_token, enabled
+    FROM google_calendar.sync_cursors
+    WHERE user_id = ${userId}
+    ORDER BY calendar_external_id
+  `;
+  const cals = rows.length
+    ? await db`
+        SELECT external_id, summary, "primary", visibility
+        FROM google_calendar.calendars
+        WHERE user_id = ${userId} AND external_id = ANY(${rows.map((r: any) => r.calendar_external_id)})
+      `
+    : [];
+  const calInfo = new Map<string, { summary: string; primary: boolean; visibility: string }>(
+    cals.map((c: any) => [c.external_id, { summary: c.summary, primary: c.primary, visibility: c.visibility ?? "share_everything" }]),
+  );
+  return {
+    cursors: rows.map((r: any) => {
+      const info = calInfo.get(r.calendar_external_id);
+      return {
+        id: r.id,
+        calendarExternalId: r.calendar_external_id,
+        calendarSummary: info?.summary ?? r.calendar_external_id,
+        isPrimary: info?.primary ?? false,
+        visibility: info?.visibility ?? "share_everything",
+        status: r.status ?? "idle",
+        lastSyncedAt: r.last_synced_at,
+        throttleCount: r.throttle_count ?? 0,
+        throttleAfter: r.throttle_after,
+        hasCron: !!r.cron_id,
+        hasToken: !!r.has_token,
+        enabled: !!r.enabled,
+      };
+    }),
+  };
+}
+
+async function meetingsCount(caller: any) {
+  const userId: string | undefined = caller?.userId;
+  if (!userId) return { count: 0 };
+  const rows = await db`
+    SELECT COUNT(DISTINCT e.id)::int AS count
+    FROM google_calendar.events e
+    JOIN google_calendar.channel_event_associations a ON a.event_id = e.id
+    WHERE a.user_id = ${userId}
+  `;
+  return { count: rows[0]?.count ?? 0 };
+}
+
+async function timelineMeetingsFromDealId(
+  params: { deal_id: string; page?: number; pageSize?: number },
+  caller: any,
+) {
+  if (!params.deal_id) throw new Error("deal_id required");
+  const { page, pageSize } = pageArgs(params);
+  const rows = await db`
+    SELECT DISTINCT id FROM crm.contacts c
+    WHERE c.id IN (SELECT contact_id FROM crm.deals WHERE id = ${params.deal_id})
+       OR c.id IN (SELECT contact_id FROM crm.deal_contacts WHERE deal_id = ${params.deal_id})
+       OR c.company_id = (SELECT company_id FROM crm.deals WHERE id = ${params.deal_id})
+  `;
+  return timelineForContactIds(rows.map((r: any) => r.id), page, pageSize, caller);
 }
 
 const ENTITY_LINK_FIELD: Record<string, string> = {

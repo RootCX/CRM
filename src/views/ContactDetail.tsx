@@ -13,8 +13,9 @@ import {
   IconEdit, IconTrash, IconMail, IconPhone, IconBriefcase, IconBuilding,
   IconNotes, IconRefresh, IconPlugConnected, IconMapPin,
   IconBrandLinkedin, IconBrandTwitter, IconStar, IconStarFilled,
-  IconChecklist, IconCurrencyDollar, IconUser,
+  IconChecklist, IconCurrencyDollar, IconUser, IconCalendarEvent,
 } from "@tabler/icons-react";
+import { MeetingsCard } from "@/components/meetings/MeetingsCard";
 import { cn } from "@/lib/utils";
 import { NotesTab } from "@/components/notes/NotesTab";
 import { ActivitiesTab } from "@/components/ActivitiesTab";
@@ -362,6 +363,7 @@ export default function ContactDetail() {
               </TabsTrigger>
               <TabsTrigger value="deals"><IconCurrencyDollar className="h-4 w-4 mr-1.5" /> Deals</TabsTrigger>
               <TabsTrigger value="emails"><IconMail className="h-4 w-4 mr-1.5" /> Emails</TabsTrigger>
+              <TabsTrigger value="meetings"><IconCalendarEvent className="h-4 w-4 mr-1.5" /> Meetings</TabsTrigger>
             </TabsList>
             <TabsContent value="details" className="md:hidden flex-1 overflow-y-auto mt-4">
               <div className="flex flex-col gap-4 pb-4">{sidebarContent}</div>
@@ -370,6 +372,7 @@ export default function ContactDetail() {
             <TabsContent value="activities" className="flex-1 overflow-hidden mt-4"><ActivitiesTab filterKey="contact_id" filterId={contactId!} /></TabsContent>
             <TabsContent value="deals"      className="flex-1 overflow-hidden mt-4"><DealsTab contactId={contactId!} /></TabsContent>
             <TabsContent value="emails"     className="flex-1 overflow-hidden mt-4"><EmailsTab contactId={contactId!} contactEmail={contact.email} /></TabsContent>
+            <TabsContent value="meetings"   className="flex-1 overflow-auto mt-4"><MeetingsCard source={{ kind: "contact", id: contactId! }} /></TabsContent>
           </Tabs>
         </div>
       </div>

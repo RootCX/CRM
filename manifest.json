@@ -1,7 +1,7 @@
 {
   "appId": "crm",
   "name": "CRM",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "icon": "assets/icon.png",
   "description": "CRM to manage contacts, companies, deals, activities, and notes. Reads email data from the Gmail integration.",
   "dataContract": [
